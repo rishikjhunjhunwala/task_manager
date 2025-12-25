@@ -1,0 +1,73 @@
+/* 
+ * Task Manager Custom Styles
+ * Tailwind CSS handles most styling via CDN
+ * This file contains custom task-specific styles
+ */
+
+/* Task status background colors */
+.status-pending {
+    background-color: #FEF3C7; /* Yellow-100 */
+}
+
+.status-in-progress {
+    background-color: #DBEAFE; /* Blue-100 */
+}
+
+.status-completed {
+    background-color: #D1FAE5; /* Green-100 */
+}
+
+.status-verified {
+    background-color: #A7F3D0; /* Green-200 */
+}
+
+.status-cancelled {
+    background-color: #F3F4F6; /* Gray-100 */
+}
+
+/* Priority indicators (left border) */
+.priority-low {
+    border-left: 4px solid #9CA3AF; /* Gray-400 */
+}
+
+.priority-medium {
+    border-left: 4px solid #3B82F6; /* Blue-500 */
+}
+
+.priority-high {
+    border-left: 4px solid #F59E0B; /* Amber-500 */
+}
+
+.priority-critical {
+    border-left: 4px solid #EF4444; /* Red-500 */
+}
+
+/* Overdue task indicator */
+.task-overdue {
+    background-color: #FEE2E2 !important; /* Red-100 */
+}
+
+/* Escalated task indicator (72+ hours overdue) */
+.task-escalated {
+    background-color: #7F1D1D !important; /* Maroon/Dark Red */
+    color: white;
+}
+
+/* HTMX loading indicator */
+.htmx-indicator {
+    display: none;
+}
+
+.htmx-request .htmx-indicator {
+    display: inline-block;
+}
+
+/* Loading spinner animation */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+}

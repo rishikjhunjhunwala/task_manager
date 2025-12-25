@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Task Manager{% endblock %}</title>
+    
+    <!-- Tailwind CSS via CDN (no build step) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10" 
+            integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" 
+            crossorigin="anonymous"></script>
+    
+    <!-- Custom styles -->
+    <style>
+        /* Task status colors */
+        .status-pending { background-color: #FEF3C7; }
+        .status-in-progress { background-color: #DBEAFE; }
+        .status-completed { background-color: #D1FAE5; }
+        .status-verified { background-color: #A7F3D0; }
+        .status-cancelled { background-color: #F3F4F6; }
+        
+        /* Priority colors */
+        .priority-low { border-left: 4px solid #9CA3AF; }
+        .priority-medium { border-left: 4px solid #3B82F6; }
+        .priority-high { border-left: 4px solid #F59E0B; }
+        .priority-critical { border-left: 4px solid #EF4444; }
+        
+        /* Overdue and escalated indicators */
+        .task-overdue { background-color: #FEE2E2 !important; }
+        .task-escalated { background-color: #7F1D1D !important; color: white; }
+        
+        /* HTMX loading indicator */
+        .htmx-indicator {
+            display: none;
+        }
+        .htmx-request .htmx-indicator {
+            display: inline-block;
+        }
+        .htmx-request.htmx-indicator {
+            display: inline-block;
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <!-- Logo and main nav -->
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <a href="{% url 'tasks:dashboard' %}" class="text-xl font-bold text-indigo-600">
+                            Task Manager
+                        </a>
+                    </div>
+                    
+                    {% if user.is_authenticated %}
+                    <div class="hidden sm:ml-6 sm:flex sm:space-x-4">
+                        <a href="{% url 'tasks:dashboard' %}" 
+                           class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-900 hover:text-indigo-600">
+                            Dashboard
+                            <!-- Badge placeholder for pending count -->
+                        </a>
+                        
+                        {% if user.role in 'admin,senior_manager_1,senior_manager_2,manager' %}
+                        <a href="{% url 'reports:reports' %}" 
+                           class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 hover:text-indigo-600">
+                            Reports
+                        </a>
+                        {% endif %}
+                        
+                        {% if user.role == 'admin' %}
+                        <a href="{% url 'activity_log:activity_list' %}" 
+                           class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 hover:text-indigo-600">
+                            Activity Log
+                        </a>
+                        <a href="{% url 'admin:index' %}" 
+                           class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 hover:text-indigo-600">
+                            Admin
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- User menu -->
+                <div class="flex items-center">
+                    {% if user.is_authenticated %}
+                    <div class="ml-3 relative">
+                        <div class="flex items-center space-x-4">
+                            <span class="text-sm text-gray-700">
+                                {{ user.get_full_name }}
+                            </span>
+                            <span class="text-xs px-2 py-1 bg-gray-200 rounded">
+                                {{ user.get_role_display }}
+                            </span>
+                            <a href="{% url 'accounts:logout' %}" 
+                               class="text-sm text-gray-500 hover:text-red-600">
+                                Logout
+                            </a>
+                        </div>
+                    </div>
+                    {% else %}
+                    <a href="{% url 'accounts:login' %}" 
+                       class="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                        Login
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash messages -->
+    {% if messages %}
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        {% for message in messages %}
+        <div class="rounded-md p-4 mb-2 
+            {% if message.tags == 'success' %}bg-green-50 text-green-800
+            {% elif message.tags == 'error' %}bg-red-50 text-red-800
+            {% elif message.tags == 'warning' %}bg-yellow-50 text-yellow-800
+            {% else %}bg-blue-50 text-blue-800{% endif %}">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <!-- Icon based on message type -->
+                    {% if message.tags == 'success' %}
+                    <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                    {% elif message.tags == 'error' %}
+                    <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                    {% endif %}
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium">{{ message }}</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Main content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <p class="text-center text-sm text-gray-500">
+                Task Manager &copy; {% now "Y" %} | 
+                <span class="text-xs">IST Timezone</span>
+            </p>
+        </div>
+    </footer>
+
+    <!-- HTMX configuration -->
+    <script>
+        // Include CSRF token in all HTMX requests
+        document.body.addEventListener('htmx:configRequest', function(evt) {
+            evt.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

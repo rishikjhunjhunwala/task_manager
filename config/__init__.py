@@ -1,0 +1,3 @@
+"""
+Config package for task_manager project.
+"""
