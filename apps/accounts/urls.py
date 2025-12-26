@@ -1,26 +1,26 @@
 """
 URL configuration for accounts app.
-Will be expanded in Phase 3 (Authentication & Security).
+
+Phase 3: Authentication & Security URLs including:
+- Login
+- Logout
+- Password change
+- Profile
 """
 
 from django.urls import path
-from django.contrib.auth import views as auth_views
-
 from . import views
 
 app_name = 'accounts'
 
 urlpatterns = [
-    # Using Django's built-in auth views temporarily
-    # Will be replaced with custom views in Phase 3
-    path(
-        'login/', 
-        auth_views.LoginView.as_view(template_name='accounts/login.html'), 
-        name='login'
-    ),
-    path(
-        'logout/', 
-        auth_views.LogoutView.as_view(next_page='accounts:login'), 
-        name='logout'
-    ),
+    # Authentication
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+    
+    # Password management
+    path('password/change/', views.password_change_view, name='password_change'),
+    
+    # Profile
+    path('profile/', views.profile_view, name='profile'),
 ]

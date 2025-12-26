@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Account Locked - Task Manager</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background-color: #DC2626; padding: 20px; text-align: center;">
+        <h1 style="color: white; margin: 0;">⚠️ Account Security Alert</h1>
+    </div>
+    
+    <div style="padding: 30px 20px; background-color: #f9fafb;">
+        <h2 style="color: #1f2937;">Your Account Has Been Locked</h2>
+        
+        <p>Hi {{ user.first_name }},</p>
+        
+        <p>
+            Your Task Manager account has been temporarily locked due to multiple failed login attempts.
+            This is a security measure to protect your account.
+        </p>
+        
+        <div style="background-color: #fee2e2; border: 1px solid #ef4444; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <p style="margin: 0; color: #991b1b;">
+                <strong>Account:</strong> {{ user.email }}<br>
+                <strong>Lock Duration:</strong> {{ lockout_minutes }} minutes
+            </p>
+        </div>
+        
+        <h3 style="color: #1f2937;">What should I do?</h3>
+        
+        <ul style="color: #6b7280;">
+            <li><strong>Wait {{ lockout_minutes }} minutes</strong> - Your account will automatically unlock after this period.</li>
+            <li><strong>Contact your administrator</strong> if you need immediate access or believe this is an error.</li>
+            <li><strong>Review your security</strong> - If you didn't attempt these logins, someone may be trying to access your account.</li>
+        </ul>
+        
+        <div style="background-color: #dbeafe; border: 1px solid #3b82f6; border-radius: 8px; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #1e40af;">
+                <strong>Tip:</strong> If you've forgotten your password, contact your administrator to request a password reset.
+            </p>
+        </div>
+        
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+        
+        <p style="color: #6b7280; font-size: 14px;">
+            If you need assistance, please contact <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+        </p>
+    </div>
+    
+    <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
+        <p>This is an automated security notification from Task Manager.</p>
+        <p>© {% now "Y" %} Century Extrusions / CNFC India</p>
+    </div>
+</body>
+</html>

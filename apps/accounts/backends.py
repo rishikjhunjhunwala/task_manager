@@ -1,5 +1,7 @@
 """
 Custom authentication backend for email-based login with lockout handling.
+
+Phase 3: Enhanced with lockout notification.
 """
 
 from django.contrib.auth.backends import ModelBackend
@@ -14,6 +16,12 @@ class EmailAuthBackend(ModelBackend):
     """
     Authenticate using email address instead of username.
     Includes account lockout logic after failed attempts.
+    
+    Features:
+    - Email-based authentication (case-insensitive)
+    - Account lockout after 5 failed attempts
+    - 15-minute lockout duration
+    - Lockout notification email
     """
 
     def authenticate(self, request, username=None, password=None, **kwargs):
@@ -33,6 +41,9 @@ class EmailAuthBackend(ModelBackend):
         
         if email is None or password is None:
             return None
+
+        # Normalize email
+        email = email.lower().strip()
 
         try:
             user = User.objects.get(email__iexact=email)
@@ -71,7 +82,20 @@ class EmailAuthBackend(ModelBackend):
         
         if user.failed_login_attempts >= lockout_threshold:
             user.lock_account(lockout_duration)
-            # TODO: Send lockout notification email
+            
+            # Send lockout notification email
+            self._send_lockout_notification(user)
+    
+    def _send_lockout_notification(self, user):
+        """Send email notification when account is locked."""
+        try:
+            from apps.accounts.services import send_lockout_notification
+            send_lockout_notification(user)
+        except Exception:
+            # Don't fail authentication if email fails
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f'Failed to send lockout notification to {user.email}')
 
     def get_user(self, user_id):
         """

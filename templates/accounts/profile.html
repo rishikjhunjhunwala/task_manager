@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+
+{% block title %}My Profile - Task Manager{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:px-6">
+            <h1 class="text-2xl font-bold text-gray-900">My Profile</h1>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">
+                Your account information and settings
+            </p>
+        </div>
+        
+        <div class="border-t border-gray-200">
+            <dl>
+                {# Name #}
+                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Full name</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        {{ user.get_full_name }}
+                    </dd>
+                </div>
+                
+                {# Email #}
+                <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Email address</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        {{ user.email }}
+                    </dd>
+                </div>
+                
+                {# Role #}
+                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Role</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                            {% if user.role == 'admin' %}bg-purple-100 text-purple-800
+                            {% elif user.role in 'senior_manager_1,senior_manager_2' %}bg-blue-100 text-blue-800
+                            {% elif user.role == 'manager' %}bg-green-100 text-green-800
+                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                            {{ user.get_role_display }}
+                        </span>
+                    </dd>
+                </div>
+                
+                {# Department #}
+                <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Department</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        {% if user.department %}
+                            {{ user.department.name }} ({{ user.department.code }})
+                        {% else %}
+                            <span class="text-gray-400">Not assigned</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                
+                {# Account created #}
+                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Account created</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        {{ user.created_at|date:"j M Y, g:i A" }}
+                    </dd>
+                </div>
+                
+                {# Last login #}
+                <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Last login</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        {% if user.last_login %}
+                            {{ user.last_login|date:"j M Y, g:i A" }}
+                        {% else %}
+                            <span class="text-gray-400">Never</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                
+                {# Password expiry #}
+                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Password expires</dt>
+                    <dd class="mt-1 text-sm sm:mt-0 sm:col-span-2">
+                        {% if password_expiry_days is not None %}
+                            {% if password_expiry_days <= 0 %}
+                                <span class="text-red-600 font-medium">Expired</span>
+                            {% elif password_expiry_days <= 7 %}
+                                <span class="text-yellow-600 font-medium">
+                                    In {{ password_expiry_days }} day{{ password_expiry_days|pluralize }}
+                                </span>
+                            {% else %}
+                                <span class="text-green-600">
+                                    In {{ password_expiry_days }} day{{ password_expiry_days|pluralize }}
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-gray-400">Not set</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+    
+    {# Security section #}
+    <div class="mt-6 bg-white shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:px-6">
+            <h2 class="text-lg font-medium text-gray-900">Security</h2>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">
+                Manage your account security settings
+            </p>
+        </div>
+        
+        <div class="border-t border-gray-200 px-4 py-5 sm:px-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-medium text-gray-900">Password</h3>
+                    <p class="text-sm text-gray-500">
+                        Change your password regularly to keep your account secure.
+                    </p>
+                </div>
+                <a href="{% url 'accounts:password_change' %}" 
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Change Password
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    {# Session info #}
+    <div class="mt-6 bg-white shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:px-6">
+            <h2 class="text-lg font-medium text-gray-900">Session Information</h2>
+        </div>
+        
+        <div class="border-t border-gray-200 px-4 py-5 sm:px-6">
+            <div class="text-sm text-gray-500">
+                <p>
+                    <strong>Idle timeout:</strong> 30 minutes of inactivity
+                </p>
+                <p class="mt-1">
+                    <strong>Absolute timeout:</strong> 8 hours maximum session length
+                </p>
+                <p class="mt-2 text-xs">
+                    For security, you will be automatically logged out after periods of inactivity 
+                    or when your session reaches its maximum length.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

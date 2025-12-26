@@ -1,6 +1,8 @@
 """
 Django base settings for task_manager project.
 Shared settings between development and production.
+
+Updated for Phase 3: Authentication & Security
 """
 
 from pathlib import Path
@@ -47,6 +49,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_htmx.middleware.HtmxMiddleware',
+    # Phase 3: Custom session management middleware
+    'apps.accounts.middleware.SessionIdleTimeoutMiddleware',
+    'apps.accounts.middleware.PasswordChangeRequiredMiddleware',
+    'apps.accounts.middleware.PasswordExpiryMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -110,6 +116,8 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'apps.accounts.validators.ComplexityValidator',
     },
+    # Phase 3: Password history validator (applied during password change)
+    # Note: PasswordHistoryValidator requires user context, so it's applied in forms
 ]
 
 # Password hashing - use Argon2 as primary
@@ -168,23 +176,31 @@ ALLOWED_UPLOAD_EXTENSIONS = [
 
 
 # =============================================================================
-# SESSION SETTINGS
+# SESSION SETTINGS (Phase 3)
 # =============================================================================
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+
+# Absolute session timeout: 8 hours (from login time)
 SESSION_COOKIE_AGE = config('SESSION_ABSOLUTE_TIMEOUT_HOURS', default=8, cast=int) * 3600
+
+# Idle timeout: 30 minutes (resets on each request)
 SESSION_IDLE_TIMEOUT = config('SESSION_IDLE_TIMEOUT_MINUTES', default=30, cast=int) * 60
+
+# Save session on every request (needed for idle timeout tracking)
 SESSION_SAVE_EVERY_REQUEST = True
+
+# Don't expire session when browser closes (we handle timeout ourselves)
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
 
 # =============================================================================
-# SECURITY SETTINGS
+# SECURITY SETTINGS (Phase 3)
 # =============================================================================
 # Account lockout settings
 LOCKOUT_THRESHOLD = config('LOCKOUT_THRESHOLD', default=5, cast=int)
 LOCKOUT_DURATION = config('LOCKOUT_DURATION_MINUTES', default=15, cast=int) * 60  # in seconds
 
-# Password expiry
+# Password expiry (90 days)
 PASSWORD_EXPIRY_DAYS = config('PASSWORD_EXPIRY_DAYS', default=90, cast=int)
 
 # Password history (cannot reuse last N passwords)
@@ -206,6 +222,15 @@ EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+
+# Default from email (for welcome emails, etc.)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@centuryextrusions.com')
+
+# Support email for user assistance
+SUPPORT_EMAIL = config('SUPPORT_EMAIL', default='admin@centuryextrusions.com')
+
+# Site URL (for email links)
+SITE_URL = config('SITE_URL', default='http://localhost:8000')
 
 
 # =============================================================================

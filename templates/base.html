@@ -42,11 +42,20 @@
         .htmx-request.htmx-indicator {
             display: inline-block;
         }
+        
+        /* User dropdown menu */
+        .dropdown-menu {
+            display: none;
+        }
+        .dropdown:hover .dropdown-menu,
+        .dropdown:focus-within .dropdown-menu {
+            display: block;
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-gray-100 min-h-screen flex flex-col">
     <!-- Navigation -->
     <nav class="bg-white shadow-sm border-b">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -62,21 +71,21 @@
                     {% if user.is_authenticated %}
                     <div class="hidden sm:ml-6 sm:flex sm:space-x-4">
                         <a href="{% url 'tasks:dashboard' %}" 
-                           class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-900 hover:text-indigo-600">
+                           class="inline-flex items-center px-3 py-2 text-sm font-medium {% if request.resolver_match.url_name == 'dashboard' %}text-indigo-600{% else %}text-gray-900 hover:text-indigo-600{% endif %}">
                             Dashboard
                             <!-- Badge placeholder for pending count -->
                         </a>
                         
                         {% if user.role in 'admin,senior_manager_1,senior_manager_2,manager' %}
                         <a href="{% url 'reports:reports' %}" 
-                           class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 hover:text-indigo-600">
+                           class="inline-flex items-center px-3 py-2 text-sm font-medium {% if 'reports' in request.path %}text-indigo-600{% else %}text-gray-500 hover:text-indigo-600{% endif %}">
                             Reports
                         </a>
                         {% endif %}
                         
                         {% if user.role == 'admin' %}
                         <a href="{% url 'activity_log:activity_list' %}" 
-                           class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 hover:text-indigo-600">
+                           class="inline-flex items-center px-3 py-2 text-sm font-medium {% if 'activity' in request.path %}text-indigo-600{% else %}text-gray-500 hover:text-indigo-600{% endif %}">
                             Activity Log
                         </a>
                         <a href="{% url 'admin:index' %}" 
@@ -91,18 +100,37 @@
                 <!-- User menu -->
                 <div class="flex items-center">
                     {% if user.is_authenticated %}
-                    <div class="ml-3 relative">
-                        <div class="flex items-center space-x-4">
+                    <div class="ml-3 relative dropdown">
+                        <button type="button" 
+                                class="flex items-center space-x-3 focus:outline-none">
                             <span class="text-sm text-gray-700">
                                 {{ user.get_full_name }}
                             </span>
                             <span class="text-xs px-2 py-1 bg-gray-200 rounded">
                                 {{ user.get_role_display }}
                             </span>
-                            <a href="{% url 'accounts:logout' %}" 
-                               class="text-sm text-gray-500 hover:text-red-600">
-                                Logout
-                            </a>
+                            <svg class="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                        
+                        <!-- Dropdown menu -->
+                        <div class="dropdown-menu absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                            <div class="py-1">
+                                <a href="{% url 'accounts:profile' %}" 
+                                   class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    My Profile
+                                </a>
+                                <a href="{% url 'accounts:password_change' %}" 
+                                   class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Change Password
+                                </a>
+                                <hr class="my-1">
+                                <a href="{% url 'accounts:logout' %}" 
+                                   class="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100">
+                                    Logout
+                                </a>
+                            </div>
                         </div>
                     </div>
                     {% else %}
@@ -114,6 +142,24 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Mobile menu (simplified) -->
+        {% if user.is_authenticated %}
+        <div class="sm:hidden border-t">
+            <div class="px-2 pt-2 pb-3 space-y-1">
+                <a href="{% url 'tasks:dashboard' %}" 
+                   class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">
+                    Dashboard
+                </a>
+                {% if user.role in 'admin,senior_manager_1,senior_manager_2,manager' %}
+                <a href="{% url 'reports:reports' %}" 
+                   class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100">
+                    Reports
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </nav>
 
     <!-- Flash messages -->
@@ -121,13 +167,12 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
         {% for message in messages %}
         <div class="rounded-md p-4 mb-2 
-            {% if message.tags == 'success' %}bg-green-50 text-green-800
-            {% elif message.tags == 'error' %}bg-red-50 text-red-800
-            {% elif message.tags == 'warning' %}bg-yellow-50 text-yellow-800
-            {% else %}bg-blue-50 text-blue-800{% endif %}">
+            {% if message.tags == 'success' %}bg-green-50 text-green-800 border border-green-200
+            {% elif message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200
+            {% elif message.tags == 'warning' %}bg-yellow-50 text-yellow-800 border border-yellow-200
+            {% else %}bg-blue-50 text-blue-800 border border-blue-200{% endif %}">
             <div class="flex">
                 <div class="flex-shrink-0">
-                    <!-- Icon based on message type -->
                     {% if message.tags == 'success' %}
                     <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
@@ -136,10 +181,26 @@
                     <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
                     </svg>
+                    {% elif message.tags == 'warning' %}
+                    <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    {% else %}
+                    <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
                     {% endif %}
                 </div>
                 <div class="ml-3">
                     <p class="text-sm font-medium">{{ message }}</p>
+                </div>
+                <div class="ml-auto pl-3">
+                    <button type="button" onclick="this.parentElement.parentElement.parentElement.remove()" 
+                            class="inline-flex rounded-md p-1.5 hover:bg-opacity-20 hover:bg-gray-500 focus:outline-none">
+                        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
         </div>
@@ -148,7 +209,7 @@
     {% endif %}
 
     <!-- Main content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {% block content %}{% endblock %}
     </main>
 
@@ -167,6 +228,20 @@
         // Include CSRF token in all HTMX requests
         document.body.addEventListener('htmx:configRequest', function(evt) {
             evt.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+        });
+        
+        // Auto-dismiss flash messages after 5 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            const messages = document.querySelectorAll('[class*="rounded-md p-4 mb-2"]');
+            messages.forEach(function(message) {
+                setTimeout(function() {
+                    message.style.transition = 'opacity 0.5s ease-out';
+                    message.style.opacity = '0';
+                    setTimeout(function() {
+                        message.remove();
+                    }, 500);
+                }, 5000);
+            });
         });
     </script>
     
