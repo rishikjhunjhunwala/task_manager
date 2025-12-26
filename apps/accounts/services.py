@@ -1,11 +1,11 @@
 """
 Service layer for accounts app.
 
-Business logic for:
+Centralized business logic for:
 - Temporary password generation
-- Account unlock
 - Welcome email sending
 - Password reset
+- Account lockout notifications
 - Session management
 """
 
@@ -14,26 +14,23 @@ import string
 from django.conf import settings
 from django.core.mail import send_mail, EmailMultiAlternatives
 from django.template.loader import render_to_string
-from django.utils.html import strip_tags
-from django.contrib.auth import get_user_model
-
-
-User = get_user_model()
+from django.utils import timezone
+from django.contrib.sessions.models import Session
 
 
 def generate_temp_password(length=16):
     """
-    Generate a temporary password that meets complexity requirements.
+    Generate a secure temporary password meeting complexity requirements.
     
     Requirements:
-    - At least 12 characters (we use 16 for extra security)
     - At least 1 uppercase letter
     - At least 1 lowercase letter
     - At least 1 digit
     - At least 1 special character
+    - Minimum 12 characters (we use 16 for extra security)
     
     Returns:
-        str: A randomly generated password
+        str: A secure temporary password
     """
     # Define character sets
     uppercase = string.ascii_uppercase
@@ -49,98 +46,59 @@ def generate_temp_password(length=16):
         secrets.choice(special),
     ]
     
-    # Fill the rest with a mix of all characters
+    # Fill remaining length with random characters from all sets
     all_chars = uppercase + lowercase + digits + special
-    remaining_length = length - len(password)
-    password.extend(secrets.choice(all_chars) for _ in range(remaining_length))
+    password.extend(secrets.choice(all_chars) for _ in range(length - 4))
     
-    # Shuffle to avoid predictable positions
+    # Shuffle to avoid predictable patterns
     password_list = list(password)
     secrets.SystemRandom().shuffle(password_list)
     
     return ''.join(password_list)
 
 
-def unlock_account(user):
-    """
-    Manually unlock a user account.
-    
-    Args:
-        user: User instance to unlock
-    
-    Returns:
-        bool: True if account was locked and is now unlocked
-    """
-    was_locked = user.is_locked()
-    user.unlock_account()
-    return was_locked
-
-
-def reset_user_password(user, send_email=True):
-    """
-    Reset a user's password to a temporary password.
-    
-    Args:
-        user: User instance
-        send_email: Whether to send the new password via email
-    
-    Returns:
-        str: The new temporary password
-    """
-    # Generate new temporary password
-    temp_password = generate_temp_password()
-    
-    # Set password and require change on next login
-    user.set_password(temp_password)
-    user.must_change_password = True
-    user.failed_login_attempts = 0
-    user.locked_until = None
-    user.save()
-    
-    # Send email with new password
-    if send_email:
-        send_password_reset_email(user, temp_password)
-    
-    return temp_password
-
-
 def send_welcome_email(user, temp_password):
     """
-    Send welcome email to new user with login credentials.
+    Send welcome email to newly created user with credentials.
     
     Args:
         user: User instance
         temp_password: The temporary password to include
+    
+    Returns:
+        bool: True if email sent successfully
     """
-    subject = 'Welcome to Task Manager - Your Account Details'
+    site_url = getattr(settings, 'SITE_URL', 'http://localhost:8000')
     
     context = {
         'user': user,
         'temp_password': temp_password,
-        'login_url': getattr(settings, 'SITE_URL', 'http://localhost:8000') + '/login/',
-        'support_email': getattr(settings, 'SUPPORT_EMAIL', 'admin@centuryextrusions.com'),
+        'login_url': f'{site_url}/login/',
+        'site_url': site_url,
+        'support_email': getattr(settings, 'SUPPORT_EMAIL', 'support@centuryextrusions.com'),
     }
     
-    # Render HTML template
-    html_content = render_to_string('accounts/emails/welcome.html', context)
-    text_content = strip_tags(html_content)
+    subject = 'Welcome to Task Manager - Your Account Details'
     
-    # Send email
+    # Render HTML and plain text versions
+    html_content = render_to_string('accounts/emails/welcome.html', context)
+    text_content = render_to_string('accounts/emails/welcome.txt', context)
+    
     try:
         email = EmailMultiAlternatives(
             subject=subject,
             body=text_content,
-            from_email=settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else None,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@centuryextrusions.com'),
             to=[user.email],
         )
         email.attach_alternative(html_content, 'text/html')
-        email.send(fail_silently=False)
+        email.send()
         return True
     except Exception as e:
-        # Log the error but don't raise - user was created successfully
+        # Log the error but don't raise - user is already created
         import logging
         logger = logging.getLogger(__name__)
-        logger.error(f'Failed to send welcome email to {user.email}: {str(e)}')
+        logger.error(f'Failed to send welcome email to {user.email}: {e}')
         return False
 
 
@@ -151,34 +109,39 @@ def send_password_reset_email(user, temp_password):
     Args:
         user: User instance
         temp_password: The new temporary password
+    
+    Returns:
+        bool: True if email sent successfully
     """
-    subject = 'Task Manager - Password Reset'
+    site_url = getattr(settings, 'SITE_URL', 'http://localhost:8000')
     
     context = {
         'user': user,
         'temp_password': temp_password,
-        'login_url': getattr(settings, 'SITE_URL', 'http://localhost:8000') + '/login/',
+        'login_url': f'{site_url}/login/',
+        'site_url': site_url,
+        'support_email': getattr(settings, 'SUPPORT_EMAIL', 'support@centuryextrusions.com'),
     }
     
-    # Render HTML template
-    html_content = render_to_string('accounts/emails/password_reset.html', context)
-    text_content = strip_tags(html_content)
+    subject = 'Task Manager - Your Password Has Been Reset'
     
-    # Send email
+    html_content = render_to_string('accounts/emails/password_reset.html', context)
+    text_content = render_to_string('accounts/emails/password_reset.txt', context)
+    
     try:
         email = EmailMultiAlternatives(
             subject=subject,
             body=text_content,
-            from_email=settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else None,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@centuryextrusions.com'),
             to=[user.email],
         )
         email.attach_alternative(html_content, 'text/html')
-        email.send(fail_silently=False)
+        email.send()
         return True
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
-        logger.error(f'Failed to send password reset email to {user.email}: {str(e)}')
+        logger.error(f'Failed to send password reset email to {user.email}: {e}')
         return False
 
 
@@ -188,99 +151,89 @@ def send_lockout_notification(user):
     
     Args:
         user: User instance
-    """
-    subject = 'Task Manager - Account Locked'
     
-    lockout_duration = getattr(settings, 'LOCKOUT_DURATION', 15 * 60)
-    lockout_minutes = lockout_duration // 60
+    Returns:
+        bool: True if email sent successfully
+    """
+    site_url = getattr(settings, 'SITE_URL', 'http://localhost:8000')
+    lockout_minutes = getattr(settings, 'LOCKOUT_DURATION', 900) // 60
     
     context = {
         'user': user,
         'lockout_minutes': lockout_minutes,
-        'support_email': getattr(settings, 'SUPPORT_EMAIL', 'admin@centuryextrusions.com'),
+        'locked_until': user.locked_until,
+        'site_url': site_url,
+        'support_email': getattr(settings, 'SUPPORT_EMAIL', 'support@centuryextrusions.com'),
     }
     
-    # Render HTML template
-    html_content = render_to_string('accounts/emails/account_locked.html', context)
-    text_content = strip_tags(html_content)
+    subject = 'Task Manager - Account Temporarily Locked'
     
-    # Send email
+    html_content = render_to_string('accounts/emails/account_locked.html', context)
+    text_content = render_to_string('accounts/emails/account_locked.txt', context)
+    
     try:
         email = EmailMultiAlternatives(
             subject=subject,
             body=text_content,
-            from_email=settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else None,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@centuryextrusions.com'),
             to=[user.email],
         )
         email.attach_alternative(html_content, 'text/html')
-        email.send(fail_silently=False)
+        email.send()
         return True
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)
-        logger.error(f'Failed to send lockout notification to {user.email}: {str(e)}')
+        logger.error(f'Failed to send lockout notification to {user.email}: {e}')
         return False
 
 
-def invalidate_user_sessions(user, exclude_session_key=None):
+def invalidate_user_sessions(user):
     """
-    Invalidate all sessions for a user (e.g., after password change).
+    Invalidate all sessions for a user.
+    Called when password is changed or user is deactivated.
     
     Args:
         user: User instance
-        exclude_session_key: Optional session key to keep (current session)
-    """
-    from django.contrib.sessions.models import Session
-    from django.utils import timezone
-    
-    # Get all active sessions
-    active_sessions = Session.objects.filter(expire_date__gt=timezone.now())
-    
-    for session in active_sessions:
-        session_data = session.get_decoded()
-        if session_data.get('_auth_user_id') == str(user.pk):
-            if exclude_session_key and session.session_key == exclude_session_key:
-                continue
-            session.delete()
-
-
-def get_user_by_email(email):
-    """
-    Get user by email (case-insensitive).
-    
-    Args:
-        email: Email address to search
     
     Returns:
-        User instance or None
+        int: Number of sessions invalidated
     """
-    try:
-        return User.objects.get(email__iexact=email)
-    except User.DoesNotExist:
-        return None
+    count = 0
+    for session in Session.objects.filter(expire_date__gte=timezone.now()):
+        try:
+            session_data = session.get_decoded()
+            if session_data.get('_auth_user_id') == str(user.pk):
+                session.delete()
+                count += 1
+        except Exception:
+            # Session decode failed, skip it
+            pass
+    return count
 
 
-def create_user(email, first_name, last_name, role='employee', department=None, send_email=True):
+def create_user_with_temp_password(email, first_name, last_name, role, department=None):
     """
     Create a new user with a temporary password.
+    Sends welcome email automatically.
     
     Args:
         email: User's email address
         first_name: User's first name
         last_name: User's last name
-        role: User's role (default: employee)
-        department: Department instance (optional)
-        send_email: Whether to send welcome email
+        role: User's role
+        department: User's department (optional)
     
     Returns:
-        tuple: (User instance, temporary password)
+        tuple: (user, temp_password, email_sent)
     """
-    # Generate temporary password
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    
     temp_password = generate_temp_password()
     
-    # Create user
     user = User.objects.create_user(
-        email=email.lower().strip(),
+        email=email,
         password=temp_password,
         first_name=first_name,
         last_name=last_name,
@@ -289,46 +242,104 @@ def create_user(email, first_name, last_name, role='employee', department=None, 
         must_change_password=True,
     )
     
-    # Send welcome email
-    if send_email:
-        send_welcome_email(user, temp_password)
+    email_sent = send_welcome_email(user, temp_password)
     
-    return user, temp_password
+    return user, temp_password, email_sent
 
 
-def deactivate_user(user, deactivated_by=None):
+def reset_user_password(user):
     """
-    Deactivate a user account.
+    Reset a user's password and send notification.
+    Used by admin for password reset functionality.
     
     Args:
-        user: User instance to deactivate
-        deactivated_by: User who performed the deactivation (for logging)
+        user: User instance
     
     Returns:
-        dict: Summary of pending tasks that need attention
+        tuple: (temp_password, email_sent)
+    """
+    temp_password = generate_temp_password()
+    
+    # Set new password
+    user.set_password(temp_password)
+    user.must_change_password = True
+    user.password_changed_at = None  # Force password change
+    user.save(update_fields=['password', 'must_change_password', 'password_changed_at'])
+    
+    # Invalidate all existing sessions
+    invalidate_user_sessions(user)
+    
+    # Send email
+    email_sent = send_password_reset_email(user, temp_password)
+    
+    return temp_password, email_sent
+
+
+def unlock_user_account(user):
+    """
+    Unlock a user's account manually.
+    
+    Args:
+        user: User instance
+    
+    Returns:
+        bool: True if account was unlocked
+    """
+    if user.is_locked():
+        user.unlock_account()
+        return True
+    return False
+
+
+def deactivate_user(user):
+    """
+    Deactivate a user account.
+    Invalidates all sessions.
+    
+    Args:
+        user: User instance
+    
+    Returns:
+        int: Number of sessions invalidated
+    """
+    user.is_active = False
+    user.save(update_fields=['is_active'])
+    
+    # Invalidate all sessions
+    return invalidate_user_sessions(user)
+
+
+def get_user_task_summary(user):
+    """
+    Get summary of tasks associated with a user.
+    Used to show warnings when deactivating users.
+    
+    Args:
+        user: User instance
+    
+    Returns:
+        dict: Task counts
     """
     from apps.tasks.models import Task
     
-    # Get pending tasks summary before deactivation
-    pending_assigned = Task.objects.filter(
+    # Tasks assigned to this user
+    assigned_tasks = Task.objects.filter(
         assignee=user,
         status__in=['pending', 'in_progress']
-    ).count()
+    )
     
-    pending_created = Task.objects.filter(
+    # Tasks created by this user
+    created_tasks = Task.objects.filter(
         created_by=user,
         status__in=['pending', 'in_progress']
-    ).exclude(assignee=user).count()
-    
-    # Deactivate user
-    user.is_active = False
-    user.save()
-    
-    # Invalidate all sessions
-    invalidate_user_sessions(user)
+    ).exclude(assignee=user)  # Exclude personal tasks
     
     return {
-        'user': user,
-        'pending_tasks_assigned': pending_assigned,
-        'pending_tasks_created': pending_created,
+        'assigned_pending': assigned_tasks.filter(status='pending').count(),
+        'assigned_in_progress': assigned_tasks.filter(status='in_progress').count(),
+        'assigned_total': assigned_tasks.count(),
+        'created_pending': created_tasks.filter(status='pending').count(),
+        'created_in_progress': created_tasks.filter(status='in_progress').count(),
+        'created_total': created_tasks.count(),
+        'has_active_tasks': assigned_tasks.exists() or created_tasks.exists(),
     }

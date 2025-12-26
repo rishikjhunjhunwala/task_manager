@@ -1,187 +1,141 @@
 """
-Custom middleware for session management.
+Custom middleware for accounts app.
 
-Implements:
-- 30-minute idle timeout (resets on each request)
-- 8-hour absolute session timeout (from login time)
-- Session invalidation handling
+Includes:
+- Session idle timeout middleware (30 minutes)
+- Password change required middleware (first login)
+- Password expiry middleware (90 days)
 """
 
-from django.conf import settings
-from django.contrib.auth import logout
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
-from django.contrib import messages
+from django.conf import settings
+from django.contrib.auth import logout
 
 
 class SessionIdleTimeoutMiddleware:
     """
-    Middleware to enforce session timeouts.
+    Middleware to log out users after a period of inactivity.
     
-    Settings used:
-    - SESSION_IDLE_TIMEOUT: Seconds of inactivity before logout (default: 1800 = 30 min)
-    - SESSION_COOKIE_AGE: Absolute session timeout (default: 28800 = 8 hours)
-    
-    Session keys used:
-    - last_activity: Timestamp of last request
-    - session_start: Timestamp when session was created (set at login)
+    Default: 30 minutes (SESSION_IDLE_TIMEOUT setting)
     """
-    
-    # URLs that don't require authentication or timeout checks
-    EXEMPT_URLS = [
-        '/login/',
-        '/logout/',
-        '/admin/login/',
-        '/static/',
-        '/media/',
-    ]
     
     def __init__(self, get_response):
         self.get_response = get_response
     
     def __call__(self, request):
-        # Skip for unauthenticated users or exempt URLs
-        if not request.user.is_authenticated:
-            return self.get_response(request)
-        
-        if self._is_exempt_url(request.path):
-            return self.get_response(request)
-        
-        now = timezone.now()
-        
-        # Check absolute session timeout (8 hours from login)
-        session_start = request.session.get('session_start')
-        if session_start:
-            session_start_dt = timezone.datetime.fromisoformat(session_start)
-            session_age = (now - session_start_dt).total_seconds()
-            absolute_timeout = getattr(settings, 'SESSION_COOKIE_AGE', 8 * 3600)
+        if request.user.is_authenticated:
+            last_activity = request.session.get('last_activity')
             
-            if session_age > absolute_timeout:
-                return self._handle_timeout(
-                    request, 
-                    'Your session has expired. Please log in again.'
-                )
-        
-        # Check idle timeout (30 minutes since last activity)
-        last_activity = request.session.get('last_activity')
-        if last_activity:
-            last_activity_dt = timezone.datetime.fromisoformat(last_activity)
-            idle_time = (now - last_activity_dt).total_seconds()
-            idle_timeout = getattr(settings, 'SESSION_IDLE_TIMEOUT', 30 * 60)
+            if last_activity:
+                # Calculate time since last activity
+                from datetime import datetime
+                last_activity_time = datetime.fromisoformat(last_activity)
+                idle_timeout = getattr(settings, 'SESSION_IDLE_TIMEOUT', 30 * 60)  # 30 minutes default
+                
+                # Make last_activity_time timezone-aware if needed
+                if timezone.is_naive(last_activity_time):
+                    last_activity_time = timezone.make_aware(last_activity_time)
+                
+                time_since_activity = (timezone.now() - last_activity_time).total_seconds()
+                
+                if time_since_activity > idle_timeout:
+                    # Session has timed out due to inactivity
+                    logout(request)
+                    from django.contrib import messages
+                    messages.warning(request, 'Your session has expired due to inactivity. Please log in again.')
+                    return redirect('accounts:login')
             
-            if idle_time > idle_timeout:
-                return self._handle_timeout(
-                    request,
-                    'You have been logged out due to inactivity.'
-                )
+            # Update last activity timestamp
+            request.session['last_activity'] = timezone.now().isoformat()
         
-        # Update last activity timestamp
-        request.session['last_activity'] = now.isoformat()
-        
-        return self.get_response(request)
-    
-    def _is_exempt_url(self, path):
-        """Check if the URL is exempt from timeout checks."""
-        for exempt_url in self.EXEMPT_URLS:
-            if path.startswith(exempt_url):
-                return True
-        return False
-    
-    def _handle_timeout(self, request, message):
-        """Log out the user and redirect to login with message."""
-        logout(request)
-        messages.warning(request, message)
-        
-        # Store the original URL for redirect after login
-        login_url = reverse('accounts:login')
-        next_url = request.get_full_path()
-        
-        # Don't redirect back to logout or admin URLs
-        if '/logout/' in next_url or '/admin/' in next_url:
-            return redirect(login_url)
-        
-        return redirect(f'{login_url}?next={next_url}')
+        response = self.get_response(request)
+        return response
 
 
 class PasswordChangeRequiredMiddleware:
     """
-    Middleware to enforce password change for users with must_change_password=True.
+    Middleware to redirect users who must change their password (first login).
     
-    Redirects to password change page for any authenticated request
-    except for the password change page itself and logout.
+    Checks: user.must_change_password flag
     """
     
-    ALLOWED_URLS = [
-        '/password/change/',
-        '/logout/',
-        '/static/',
-        '/media/',
+    # URLs that are allowed even when password change is required
+    EXEMPT_URLS = [
+        'accounts:password_change_first_login',
+        'accounts:logout',
+        'admin:index',
+        'admin:login',
     ]
     
     def __init__(self, get_response):
         self.get_response = get_response
     
     def __call__(self, request):
-        if not request.user.is_authenticated:
-            return self.get_response(request)
+        if request.user.is_authenticated:
+            # Check if user must change password
+            if getattr(request.user, 'must_change_password', False):
+                # Get current URL name
+                try:
+                    from django.urls import resolve
+                    current_url = resolve(request.path_info).url_name
+                    current_namespace = resolve(request.path_info).namespace
+                    full_url_name = f"{current_namespace}:{current_url}" if current_namespace else current_url
+                except:
+                    full_url_name = None
+                
+                # Check if current URL is exempt
+                if full_url_name not in self.EXEMPT_URLS and not request.path.startswith('/admin/'):
+                    return redirect('accounts:password_change_first_login')
         
-        # Check if user must change password
-        if hasattr(request.user, 'must_change_password') and request.user.must_change_password:
-            # Allow access to certain URLs
-            if not self._is_allowed_url(request.path):
-                messages.warning(
-                    request, 
-                    'You must change your password before continuing.'
-                )
-                return redirect('accounts:password_change')
-        
-        return self.get_response(request)
-    
-    def _is_allowed_url(self, path):
-        """Check if the URL is allowed during forced password change."""
-        for allowed_url in self.ALLOWED_URLS:
-            if path.startswith(allowed_url):
-                return True
-        return False
+        response = self.get_response(request)
+        return response
 
 
 class PasswordExpiryMiddleware:
     """
-    Middleware to check if user's password has expired (90 days).
+    Middleware to redirect users with expired passwords.
     
-    Redirects to password change page if password is expired.
+    Default expiry: 90 days (PASSWORD_EXPIRY_DAYS setting)
     """
     
-    ALLOWED_URLS = [
-        '/password/change/',
-        '/logout/',
-        '/static/',
-        '/media/',
+    # URLs that are allowed even when password is expired
+    EXEMPT_URLS = [
+        'accounts:password_change',
+        'accounts:password_change_first_login',
+        'accounts:logout',
+        'accounts:login',
+        'admin:index',
+        'admin:login',
     ]
     
     def __init__(self, get_response):
         self.get_response = get_response
     
     def __call__(self, request):
-        if not request.user.is_authenticated:
-            return self.get_response(request)
+        if request.user.is_authenticated:
+            # Skip if must_change_password is set (handled by other middleware)
+            if getattr(request.user, 'must_change_password', False):
+                response = self.get_response(request)
+                return response
+            
+            # Check if password is expired
+            if hasattr(request.user, 'is_password_expired') and request.user.is_password_expired():
+                # Get current URL name
+                try:
+                    from django.urls import resolve
+                    current_url = resolve(request.path_info).url_name
+                    current_namespace = resolve(request.path_info).namespace
+                    full_url_name = f"{current_namespace}:{current_url}" if current_namespace else current_url
+                except:
+                    full_url_name = None
+                
+                # Check if current URL is exempt
+                if full_url_name not in self.EXEMPT_URLS and not request.path.startswith('/admin/'):
+                    from django.contrib import messages
+                    messages.warning(request, 'Your password has expired. Please change it now.')
+                    return redirect('accounts:password_change')
         
-        # Check if password has expired
-        if hasattr(request.user, 'is_password_expired') and request.user.is_password_expired():
-            # Allow access to certain URLs
-            if not self._is_allowed_url(request.path):
-                messages.warning(
-                    request, 
-                    'Your password has expired. Please set a new password.'
-                )
-                return redirect('accounts:password_change')
-        
-        return self.get_response(request)
-    
-    def _is_allowed_url(self, path):
-        """Check if the URL is allowed during password expiry."""
-        for allowed_url in self.ALLOWED_URLS:
-            if path.startswith(allowed_url):
-                return True
-        return False
+        response = self.get_response(request)
+        return response

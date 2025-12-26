@@ -1,3 +1,1 @@
-"""
-Config package for task_manager project.
-"""
+"""Config package for task_manager project."""

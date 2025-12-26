@@ -1,0 +1,26 @@
+Account Temporarily Locked - Task Manager
+==========================================
+
+Hello {{ user.first_name }},
+
+Your Task Manager account has been temporarily locked due to multiple failed login attempts.
+
+ACCOUNT DETAILS:
+- Email: {{ user.email }}
+- Locked until: {{ locked_until|date:"j M Y, g:i A" }} IST
+- Duration: {{ lockout_minutes }} minutes
+
+WHAT TO DO NEXT:
+1. Wait for the lockout period to expire ({{ lockout_minutes }} minutes)
+2. Try logging in again with the correct password
+3. If you've forgotten your password, contact your administrator for a reset
+
+---
+
+SECURITY NOTICE: If you did not attempt to log in, someone else may be trying to access your account. Please contact your administrator immediately and consider changing your password.
+
+---
+
+If you need assistance, please contact your administrator or email us at {{ support_email }}.
+
+This is an automated security notification from Task Manager. Please do not reply to this email.

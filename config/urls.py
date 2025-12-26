@@ -1,21 +1,27 @@
 """
 URL configuration for task_manager project.
+
+Phase 4 Update: Added accounts (user management) and departments routes.
 """
 
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.generic import RedirectView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     
     # App URLs
-    path('', include('apps.accounts.urls', namespace='accounts')),
+    path('', include('apps.accounts.urls')),  # Includes login at /login/, users at /users/
     path('tasks/', include('apps.tasks.urls', namespace='tasks')),
     path('departments/', include('apps.departments.urls', namespace='departments')),
     path('reports/', include('apps.reports.urls', namespace='reports')),
     path('activity/', include('apps.activity_log.urls', namespace='activity_log')),
+    
+    # Root redirect to tasks dashboard (for authenticated users)
+    path('', RedirectView.as_view(url='/tasks/', permanent=False), name='home'),
 ]
 
 # Serve media files in development
@@ -24,10 +30,13 @@ if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])
     
     # Debug toolbar
-    import debug_toolbar
-    urlpatterns = [
-        path('__debug__/', include(debug_toolbar.urls)),
-    ] + urlpatterns
+    try:
+        import debug_toolbar
+        urlpatterns = [
+            path('__debug__/', include(debug_toolbar.urls)),
+        ] + urlpatterns
+    except ImportError:
+        pass
 
 # Admin site customization
 admin.site.site_header = 'Task Manager Administration'

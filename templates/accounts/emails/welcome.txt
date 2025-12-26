@@ -1,0 +1,19 @@
+Welcome to Task Manager
+=======================
+
+Hello {{ user.first_name }},
+
+Your Task Manager account has been created. Below are your login credentials:
+
+Email: {{ user.email }}
+Temporary Password: {{ temp_password }}
+
+IMPORTANT: You will be required to change this password when you first log in.
+
+Log in at: {{ login_url }}
+
+---
+
+If you have any questions, please contact your administrator or email us at {{ support_email }}.
+
+This is an automated message from Task Manager. Please do not reply to this email.

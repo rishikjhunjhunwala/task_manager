@@ -1,3 +1,1 @@
-"""
-Apps package for task_manager project.
-"""
+"""Apps package for task_manager project."""

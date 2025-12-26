@@ -2,56 +2,44 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome to Task Manager</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background-color: #4F46E5; padding: 20px; text-align: center;">
-        <h1 style="color: white; margin: 0;">Task Manager</h1>
+    <div style="background-color: #4F46E5; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="color: white; margin: 0;">Welcome to Task Manager</h1>
     </div>
     
-    <div style="padding: 30px 20px; background-color: #f9fafb;">
-        <h2 style="color: #1f2937;">Welcome, {{ user.first_name }}!</h2>
+    <div style="background-color: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hello <strong>{{ user.first_name }}</strong>,</p>
         
-        <p>Your Task Manager account has been created. Here are your login details:</p>
+        <p>Your Task Manager account has been created. Below are your login credentials:</p>
         
-        <div style="background-color: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
-            <p style="margin: 5px 0;"><strong>Email:</strong> {{ user.email }}</p>
-            <p style="margin: 5px 0;"><strong>Temporary Password:</strong> {{ temp_password }}</p>
+        <div style="background-color: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e5e7eb;">
+            <p style="margin: 0 0 10px 0;"><strong>Email:</strong> {{ user.email }}</p>
+            <p style="margin: 0;"><strong>Temporary Password:</strong> <code style="background-color: #f3f4f6; padding: 4px 8px; border-radius: 4px;">{{ temp_password }}</code></p>
         </div>
         
-        <div style="background-color: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
-            <p style="margin: 0; color: #92400e;">
-                <strong>Important:</strong> You will be required to change your password when you first log in.
-            </p>
+        <div style="background-color: #FEF3C7; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #FCD34D;">
+            <p style="margin: 0; color: #92400E;"><strong>⚠️ Important:</strong> You will be required to change this password when you first log in.</p>
         </div>
         
-        <p>
-            <a href="{{ login_url }}" 
-               style="display: inline-block; background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <p style="text-align: center; margin: 30px 0;">
+            <a href="{{ login_url }}" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
                 Log In Now
             </a>
         </p>
         
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
         
-        <h3 style="color: #1f2937;">Password Requirements</h3>
-        <ul style="color: #6b7280;">
-            <li>At least 12 characters long</li>
-            <li>At least one uppercase letter (A-Z)</li>
-            <li>At least one lowercase letter (a-z)</li>
-            <li>At least one number (0-9)</li>
-            <li>At least one special character</li>
-        </ul>
-        
-        <p style="color: #6b7280; font-size: 14px;">
-            If you did not expect this email or have questions, please contact your administrator at 
-            <a href="mailto:{{ support_email }}">{{ support_email }}</a>.
+        <p style="font-size: 14px; color: #6b7280;">
+            If you have any questions, please contact your administrator or email us at 
+            <a href="mailto:{{ support_email }}" style="color: #4F46E5;">{{ support_email }}</a>.
         </p>
-    </div>
-    
-    <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
-        <p>This is an automated message from Task Manager.</p>
-        <p>© {% now "Y" %} Century Extrusions / CNFC India</p>
+        
+        <p style="font-size: 12px; color: #9ca3af; margin-top: 20px;">
+            This is an automated message from Task Manager. Please do not reply to this email.
+        </p>
     </div>
 </body>
 </html>

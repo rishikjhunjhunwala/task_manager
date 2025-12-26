@@ -43,12 +43,12 @@
             display: inline-block;
         }
         
-        /* User dropdown menu */
+        /* Dropdown menu */
         .dropdown-menu {
             display: none;
         }
         .dropdown:hover .dropdown-menu,
-        .dropdown:focus-within .dropdown-menu {
+        .dropdown-menu:hover {
             display: block;
         }
     </style>
@@ -71,27 +71,46 @@
                     {% if user.is_authenticated %}
                     <div class="hidden sm:ml-6 sm:flex sm:space-x-4">
                         <a href="{% url 'tasks:dashboard' %}" 
-                           class="inline-flex items-center px-3 py-2 text-sm font-medium {% if request.resolver_match.url_name == 'dashboard' %}text-indigo-600{% else %}text-gray-900 hover:text-indigo-600{% endif %}">
+                           class="inline-flex items-center px-3 py-2 text-sm font-medium {% if request.resolver_match.url_name == 'dashboard' %}text-indigo-600 border-b-2 border-indigo-600{% else %}text-gray-500 hover:text-indigo-600{% endif %}">
                             Dashboard
-                            <!-- Badge placeholder for pending count -->
                         </a>
                         
                         {% if user.role in 'admin,senior_manager_1,senior_manager_2,manager' %}
                         <a href="{% url 'reports:reports' %}" 
-                           class="inline-flex items-center px-3 py-2 text-sm font-medium {% if 'reports' in request.path %}text-indigo-600{% else %}text-gray-500 hover:text-indigo-600{% endif %}">
+                           class="inline-flex items-center px-3 py-2 text-sm font-medium {% if 'reports' in request.path %}text-indigo-600 border-b-2 border-indigo-600{% else %}text-gray-500 hover:text-indigo-600{% endif %}">
                             Reports
                         </a>
                         {% endif %}
                         
                         {% if user.role == 'admin' %}
-                        <a href="{% url 'activity_log:activity_list' %}" 
-                           class="inline-flex items-center px-3 py-2 text-sm font-medium {% if 'activity' in request.path %}text-indigo-600{% else %}text-gray-500 hover:text-indigo-600{% endif %}">
-                            Activity Log
-                        </a>
-                        <a href="{% url 'admin:index' %}" 
-                           class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 hover:text-indigo-600">
-                            Admin
-                        </a>
+                        <!-- Admin Dropdown -->
+                        <div class="relative dropdown">
+                            <button class="inline-flex items-center px-3 py-2 text-sm font-medium {% if 'users' in request.path or 'departments' in request.path or 'activity' in request.path %}text-indigo-600 border-b-2 border-indigo-600{% else %}text-gray-500 hover:text-indigo-600{% endif %}">
+                                Admin
+                                <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
+                            <div class="dropdown-menu absolute left-0 mt-1 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+                                <a href="{% url 'accounts:user_list' %}" 
+                                   class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    User Management
+                                </a>
+                                <a href="{% url 'departments:department_list' %}" 
+                                   class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Department Management
+                                </a>
+                                <hr class="my-1">
+                                <a href="{% url 'activity_log:activity_list' %}" 
+                                   class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Activity Log
+                                </a>
+                                <a href="{% url 'admin:index' %}" 
+                                   class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Django Admin
+                                </a>
+                            </div>
+                        </div>
                         {% endif %}
                     </div>
                     {% endif %}
@@ -100,37 +119,37 @@
                 <!-- User menu -->
                 <div class="flex items-center">
                     {% if user.is_authenticated %}
-                    <div class="ml-3 relative dropdown">
-                        <button type="button" 
-                                class="flex items-center space-x-3 focus:outline-none">
-                            <span class="text-sm text-gray-700">
+                    <div class="relative dropdown">
+                        <button class="flex items-center space-x-3 text-sm focus:outline-none">
+                            <span class="hidden md:inline-block text-gray-700">
                                 {{ user.get_full_name }}
                             </span>
-                            <span class="text-xs px-2 py-1 bg-gray-200 rounded">
+                            <span class="inline-flex items-center px-2 py-1 text-xs font-medium rounded
+                                {% if user.role == 'admin' %}bg-purple-100 text-purple-800
+                                {% elif user.role == 'senior_manager_1' %}bg-red-100 text-red-800
+                                {% elif user.role == 'senior_manager_2' %}bg-orange-100 text-orange-800
+                                {% elif user.role == 'manager' %}bg-blue-100 text-blue-800
+                                {% else %}bg-green-100 text-green-800{% endif %}">
                                 {{ user.get_role_display }}
                             </span>
-                            <svg class="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                             </svg>
                         </button>
-                        
-                        <!-- Dropdown menu -->
-                        <div class="dropdown-menu absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
-                            <div class="py-1">
-                                <a href="{% url 'accounts:profile' %}" 
-                                   class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                    My Profile
-                                </a>
-                                <a href="{% url 'accounts:password_change' %}" 
-                                   class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                    Change Password
-                                </a>
-                                <hr class="my-1">
-                                <a href="{% url 'accounts:logout' %}" 
-                                   class="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100">
-                                    Logout
-                                </a>
-                            </div>
+                        <div class="dropdown-menu absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+                            <a href="{% url 'accounts:profile' %}" 
+                               class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                My Profile
+                            </a>
+                            <a href="{% url 'accounts:password_change' %}" 
+                               class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                Change Password
+                            </a>
+                            <hr class="my-1">
+                            <a href="{% url 'accounts:logout' %}" 
+                               class="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100">
+                                Logout
+                            </a>
                         </div>
                     </div>
                     {% else %}
@@ -143,18 +162,32 @@
             </div>
         </div>
         
-        <!-- Mobile menu (simplified) -->
+        <!-- Mobile menu -->
         {% if user.is_authenticated %}
-        <div class="sm:hidden border-t">
-            <div class="px-2 pt-2 pb-3 space-y-1">
+        <div class="sm:hidden border-t border-gray-200">
+            <div class="pt-2 pb-3 space-y-1">
                 <a href="{% url 'tasks:dashboard' %}" 
-                   class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100">
+                   class="block pl-3 pr-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50">
                     Dashboard
                 </a>
                 {% if user.role in 'admin,senior_manager_1,senior_manager_2,manager' %}
                 <a href="{% url 'reports:reports' %}" 
-                   class="block px-3 py-2 rounded-md text-base font-medium text-gray-500 hover:bg-gray-100">
+                   class="block pl-3 pr-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50">
                     Reports
+                </a>
+                {% endif %}
+                {% if user.role == 'admin' %}
+                <a href="{% url 'accounts:user_list' %}" 
+                   class="block pl-3 pr-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50">
+                    User Management
+                </a>
+                <a href="{% url 'departments:department_list' %}" 
+                   class="block pl-3 pr-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50">
+                    Department Management
+                </a>
+                <a href="{% url 'activity_log:activity_list' %}" 
+                   class="block pl-3 pr-4 py-2 text-base font-medium text-gray-700 hover:bg-gray-50">
+                    Activity Log
                 </a>
                 {% endif %}
             </div>
@@ -195,9 +228,8 @@
                     <p class="text-sm font-medium">{{ message }}</p>
                 </div>
                 <div class="ml-auto pl-3">
-                    <button type="button" onclick="this.parentElement.parentElement.parentElement.remove()" 
-                            class="inline-flex rounded-md p-1.5 hover:bg-opacity-20 hover:bg-gray-500 focus:outline-none">
-                        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <button onclick="this.parentElement.parentElement.parentElement.remove()" class="inline-flex text-gray-400 hover:text-gray-500">
+                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
                             <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
                         </svg>
                     </button>
@@ -209,7 +241,7 @@
     {% endif %}
 
     <!-- Main content -->
-    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {% block content %}{% endblock %}
     </main>
 
@@ -231,18 +263,14 @@
         });
         
         // Auto-dismiss flash messages after 5 seconds
-        document.addEventListener('DOMContentLoaded', function() {
-            const messages = document.querySelectorAll('[class*="rounded-md p-4 mb-2"]');
-            messages.forEach(function(message) {
-                setTimeout(function() {
-                    message.style.transition = 'opacity 0.5s ease-out';
-                    message.style.opacity = '0';
-                    setTimeout(function() {
-                        message.remove();
-                    }, 500);
-                }, 5000);
+        setTimeout(function() {
+            var messages = document.querySelectorAll('[class*="bg-green-50"], [class*="bg-blue-50"]');
+            messages.forEach(function(msg) {
+                msg.style.transition = 'opacity 0.5s';
+                msg.style.opacity = '0';
+                setTimeout(function() { msg.remove(); }, 500);
             });
-        });
+        }, 5000);
     </script>
     
     {% block extra_js %}{% endblock %}

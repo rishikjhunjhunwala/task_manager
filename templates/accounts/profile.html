@@ -3,71 +3,80 @@
 {% block title %}My Profile - Task Manager{% endblock %}
 
 {% block content %}
-<div class="max-w-3xl mx-auto">
-    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
-        <div class="px-4 py-5 sm:px-6">
-            <h1 class="text-2xl font-bold text-gray-900">My Profile</h1>
-            <p class="mt-1 max-w-2xl text-sm text-gray-500">
-                Your account information and settings
-            </p>
+<div class="max-w-3xl mx-auto space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">My Profile</h1>
+        <p class="mt-1 text-sm text-gray-500">View and manage your account settings</p>
+    </div>
+
+    <!-- Profile Card -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <!-- Profile Header -->
+        <div class="bg-indigo-600 px-6 py-8">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <span class="h-20 w-20 rounded-full bg-white flex items-center justify-center text-2xl font-bold text-indigo-600">
+                        {{ user.first_name|slice:":1" }}{{ user.last_name|slice:":1" }}
+                    </span>
+                </div>
+                <div class="ml-6">
+                    <h2 class="text-xl font-bold text-white">{{ user.get_full_name }}</h2>
+                    <p class="text-indigo-200">{{ user.email }}</p>
+                    <span class="inline-flex items-center mt-2 px-3 py-0.5 rounded-full text-sm font-medium 
+                        {% if user.role == 'admin' %}bg-purple-100 text-purple-800
+                        {% elif user.role == 'senior_manager_1' %}bg-red-100 text-red-800
+                        {% elif user.role == 'senior_manager_2' %}bg-orange-100 text-orange-800
+                        {% elif user.role == 'manager' %}bg-blue-100 text-blue-800
+                        {% else %}bg-green-100 text-green-800{% endif %}">
+                        {{ user.get_role_display }}
+                    </span>
+                </div>
+            </div>
         </div>
-        
-        <div class="border-t border-gray-200">
-            <dl>
-                {# Name #}
-                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">Full name</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                        {{ user.get_full_name }}
-                    </dd>
+
+        <!-- Profile Details -->
+        <div class="px-6 py-6">
+            <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Email</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ user.email }}</dd>
                 </div>
                 
-                {# Email #}
-                <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">Email address</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                        {{ user.email }}
-                    </dd>
-                </div>
-                
-                {# Role #}
-                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">Role</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                            {% if user.role == 'admin' %}bg-purple-100 text-purple-800
-                            {% elif user.role in 'senior_manager_1,senior_manager_2' %}bg-blue-100 text-blue-800
-                            {% elif user.role == 'manager' %}bg-green-100 text-green-800
-                            {% else %}bg-gray-100 text-gray-800{% endif %}">
-                            {{ user.get_role_display }}
-                        </span>
-                    </dd>
-                </div>
-                
-                {# Department #}
-                <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                <div>
                     <dt class="text-sm font-medium text-gray-500">Department</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                    <dd class="mt-1 text-sm text-gray-900">
                         {% if user.department %}
-                            {{ user.department.name }} ({{ user.department.code }})
+                            {{ user.department.name }}
                         {% else %}
                             <span class="text-gray-400">Not assigned</span>
                         {% endif %}
                     </dd>
                 </div>
                 
-                {# Account created #}
-                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">Account created</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                        {{ user.created_at|date:"j M Y, g:i A" }}
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Role</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ user.get_role_display }}</dd>
+                </div>
+                
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Account Status</dt>
+                    <dd class="mt-1">
+                        {% if user.is_active %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Active
+                            </span>
+                        {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                Inactive
+                            </span>
+                        {% endif %}
                     </dd>
                 </div>
                 
-                {# Last login #}
-                <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">Last login</dt>
-                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Last Login</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
                         {% if user.last_login %}
                             {{ user.last_login|date:"j M Y, g:i A" }}
                         {% else %}
@@ -76,74 +85,109 @@
                     </dd>
                 </div>
                 
-                {# Password expiry #}
-                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-                    <dt class="text-sm font-medium text-gray-500">Password expires</dt>
-                    <dd class="mt-1 text-sm sm:mt-0 sm:col-span-2">
-                        {% if password_expiry_days is not None %}
-                            {% if password_expiry_days <= 0 %}
-                                <span class="text-red-600 font-medium">Expired</span>
-                            {% elif password_expiry_days <= 7 %}
-                                <span class="text-yellow-600 font-medium">
-                                    In {{ password_expiry_days }} day{{ password_expiry_days|pluralize }}
-                                </span>
-                            {% else %}
-                                <span class="text-green-600">
-                                    In {{ password_expiry_days }} day{{ password_expiry_days|pluralize }}
-                                </span>
-                            {% endif %}
-                        {% else %}
-                            <span class="text-gray-400">Not set</span>
-                        {% endif %}
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Account Created</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                        {{ user.created_at|date:"j M Y" }}
                     </dd>
                 </div>
             </dl>
         </div>
     </div>
-    
-    {# Security section #}
-    <div class="mt-6 bg-white shadow overflow-hidden sm:rounded-lg">
-        <div class="px-4 py-5 sm:px-6">
-            <h2 class="text-lg font-medium text-gray-900">Security</h2>
-            <p class="mt-1 max-w-2xl text-sm text-gray-500">
-                Manage your account security settings
-            </p>
+
+    <!-- Password Security -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Password & Security</h3>
         </div>
         
-        <div class="border-t border-gray-200 px-4 py-5 sm:px-6">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="text-sm font-medium text-gray-900">Password</h3>
-                    <p class="text-sm text-gray-500">
-                        Change your password regularly to keep your account secure.
-                    </p>
+        <div class="px-6 py-6">
+            {% if days_until_expiry is not None %}
+            <div class="mb-6">
+                {% if days_until_expiry <= 0 %}
+                <div class="rounded-md bg-red-50 p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-red-800">Password Expired</h3>
+                            <p class="mt-1 text-sm text-red-700">
+                                Your password has expired. Please change it now.
+                            </p>
+                        </div>
+                    </div>
                 </div>
-                <a href="{% url 'accounts:password_change' %}" 
-                   class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                {% elif days_until_expiry <= 7 %}
+                <div class="rounded-md bg-yellow-50 p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-yellow-800">Password Expiring Soon</h3>
+                            <p class="mt-1 text-sm text-yellow-700">
+                                Your password will expire in {{ days_until_expiry }} day{{ days_until_expiry|pluralize }}.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="rounded-md bg-green-50 p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-green-700">
+                                Your password is valid for {{ days_until_expiry }} more day{{ days_until_expiry|pluralize }}.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            
+            <div class="flex justify-between items-center">
+                <div>
+                    <h4 class="text-sm font-medium text-gray-900">Change Password</h4>
+                    <p class="text-sm text-gray-500">Update your password regularly to keep your account secure.</p>
+                </div>
+                <a href="{% url 'accounts:password_change' %}"
+                   class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                     Change Password
                 </a>
             </div>
         </div>
     </div>
-    
-    {# Session info #}
-    <div class="mt-6 bg-white shadow overflow-hidden sm:rounded-lg">
-        <div class="px-4 py-5 sm:px-6">
-            <h2 class="text-lg font-medium text-gray-900">Session Information</h2>
+
+    <!-- Session Info -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">Session Information</h3>
         </div>
         
-        <div class="border-t border-gray-200 px-4 py-5 sm:px-6">
-            <div class="text-sm text-gray-500">
-                <p>
-                    <strong>Idle timeout:</strong> 30 minutes of inactivity
-                </p>
-                <p class="mt-1">
-                    <strong>Absolute timeout:</strong> 8 hours maximum session length
-                </p>
-                <p class="mt-2 text-xs">
-                    For security, you will be automatically logged out after periods of inactivity 
-                    or when your session reaches its maximum length.
-                </p>
+        <div class="px-6 py-6">
+            <div class="text-sm text-gray-600">
+                <p><strong>Session Timeout:</strong> Your session will expire after 30 minutes of inactivity.</p>
+                <p class="mt-2"><strong>Absolute Timeout:</strong> You will be automatically logged out after 8 hours.</p>
+            </div>
+            
+            <div class="mt-6">
+                <a href="{% url 'accounts:logout' %}"
+                   class="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                    <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                    </svg>
+                    Sign Out
+                </a>
             </div>
         </div>
     </div>
