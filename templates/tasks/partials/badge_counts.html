@@ -1,0 +1,10 @@
+<span id="pending-badge" 
+      class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-600">
+    {{ counts.total_pending }}
+</span>
+{% if counts.overdue > 0 %}
+<span id="overdue-badge"
+      class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium bg-red-100 text-red-600">
+    {{ counts.overdue }} overdue
+</span>
+{% endif %}

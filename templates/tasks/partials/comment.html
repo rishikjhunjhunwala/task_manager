@@ -1,0 +1,17 @@
+<div class="flex space-x-3 p-4 bg-gray-50 rounded-lg">
+    <div class="flex-shrink-0">
+        <div class="h-8 w-8 rounded-full bg-indigo-500 flex items-center justify-center">
+            <span class="text-white text-sm font-medium">
+                {{ comment.author.first_name|slice:":1" }}{{ comment.author.last_name|slice:":1" }}
+            </span>
+        </div>
+    </div>
+    <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-gray-900">
+            {{ comment.author.get_full_name }}
+            <span class="text-gray-500 font-normal">•</span>
+            <span class="text-gray-500 font-normal text-xs">{{ comment.created_at|date:"d M Y, g:i A" }}</span>
+        </p>
+        <p class="mt-1 text-sm text-gray-600 whitespace-pre-wrap">{{ comment.content }}</p>
+    </div>
+</div>
