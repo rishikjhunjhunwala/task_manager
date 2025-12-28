@@ -3,102 +3,65 @@ Service layer for tasks app.
 
 All business logic for task operations is centralized here.
 This enables reuse from views (manual) and email parser (Phase 2).
-
-Services:
-- create_task: Create new task with permissions check
-- update_task: Update task fields with activity logging
-- change_status: Change task status with workflow validation
-- reassign_task: Reassign task to different user
-- cancel_task: Cancel a task with reason
-- add_comment: Add comment to task
-- add_or_replace_attachment: Handle task attachments
 """
 
 from django.utils import timezone
 from django.db import transaction
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import ValidationError
 
 from .models import Task, Comment, Attachment
-from .permissions import (
-    can_assign_to_user, can_edit_task, can_change_status,
-    can_reassign_task, can_cancel_task, can_add_comment, can_add_attachment
-)
-from apps.activity_log.models import log_task_activity, TaskActivity
+from apps.activity_log.models import log_task_activity
 
+
+# =============================================================================
+# Task Creation
+# =============================================================================
 
 def create_task(
-    title: str,
+    title,
     assignee,
     created_by,
-    description: str = '',
+    description='',
     deadline=None,
-    priority: str = 'medium',
-    source: str = 'manual',
-    source_reference: str = None
+    priority='medium',
+    source='manual',
+    source_reference=None
 ):
     """
     Central task creation function.
     Called by views (manual) and email parser (automated in Phase 2).
     
     Args:
-        title: Task title (required)
-        assignee: User to assign task to (required)
-        created_by: User creating the task (required)
-        description: Task description (optional)
-        deadline: DateTime when task is due (optional)
-        priority: low/medium/high/critical (default: medium)
-        source: manual/email (default: manual)
-        source_reference: Email ID for Phase 2 (optional)
+        title: Task title
+        assignee: User to assign task to
+        created_by: User creating the task
+        description: Task description
+        deadline: DateTime when task is due
+        priority: low/medium/high/critical
+        source: manual/email
+        source_reference: Email ID for Phase 2
     
     Returns:
         Created Task instance
     
     Raises:
-        PermissionDenied: If assignment violates role-based rules
-        ValidationError: If required fields are missing
+        PermissionError: If assignment violates role-based rules
     """
-    # Validate required fields
-    if not title or not title.strip():
-        raise ValidationError("Task title is required.")
-    
-    if not assignee:
-        raise ValidationError("Assignee is required.")
-    
-    if not created_by:
-        raise ValidationError("Creator is required.")
-    
-    # Check if assignee is active
-    if not assignee.is_active:
-        raise ValidationError("Cannot assign task to inactive user.")
+    from .permissions import can_assign_to
     
     # Validate assignment permissions
-    if not can_assign_to_user(created_by, assignee):
+    if not can_assign_to(created_by, assignee):
         if created_by.role == 'employee':
-            raise PermissionDenied("Employees can only create personal tasks.")
+            raise PermissionError("Employees can only create personal tasks")
         elif created_by.role == 'manager':
-            raise PermissionDenied("Managers can only assign tasks within their department.")
+            raise PermissionError("Managers can only assign within their department")
         else:
-            raise PermissionDenied("You don't have permission to assign tasks to this user.")
-    
-    # Validate priority
-    valid_priorities = ['low', 'medium', 'high', 'critical']
-    if priority not in valid_priorities:
-        priority = 'medium'
-    
-    # Validate deadline is in the future (if provided)
-    if deadline and deadline < timezone.now():
-        raise ValidationError("Deadline cannot be in the past.")
-    
-    # Check if assignee has a department
-    if not assignee.department:
-        raise ValidationError(f"User {assignee.get_full_name()} is not assigned to any department.")
+            raise PermissionError("You cannot assign tasks to this user")
     
     with transaction.atomic():
-        # Create the task
-        # Note: reference_number, task_type, and department are auto-set in model.save()
         task = Task.objects.create(
-            title=title.strip(),
-            description=description.strip() if description else '',
+            title=title,
+            description=description,
             assignee=assignee,
             created_by=created_by,
             department=assignee.department,
@@ -109,260 +72,238 @@ def create_task(
         )
         
         # Log activity
-        if task.is_personal:
-            description_text = f'Personal task created: "{task.title}"'
+        if task.task_type == 'personal':
+            description_text = f'Personal task created'
         else:
             description_text = f'Task created and assigned to {assignee.get_full_name()}'
         
         log_task_activity(
             task=task,
             user=created_by,
-            action_type=TaskActivity.ActionType.CREATED,
+            action_type='created',
             description=description_text
         )
         
-        # Send notification for delegated tasks (will be implemented in Phase 9)
-        if task.is_delegated:
-            _notify_task_assigned(task)
+        # TODO: Notify assignee if delegated (Phase 9)
+        # if task.task_type == 'delegated':
+        #     notify_task_assigned(task)
     
     return task
 
 
+# =============================================================================
+# Task Updates
+# =============================================================================
+
 def update_task(task, user, **kwargs):
     """
-    Update task fields with activity logging.
-    Only task creator (or admin) can edit.
+    Update task fields with change tracking.
+    Only task creator or admin can edit.
     
     Args:
         task: Task instance to update
-        user: User performing the update
+        user: User making the change
         **kwargs: Fields to update (title, description, priority, deadline)
     
     Returns:
         Updated Task instance
     
     Raises:
-        PermissionDenied: If user cannot edit the task
-        ValidationError: If validation fails
+        PermissionError: If user cannot edit the task
     """
-    if not can_edit_task(user, task):
-        raise PermissionDenied("You don't have permission to edit this task.")
+    from .permissions import can_edit_task
     
-    # Editable fields
-    editable_fields = ['title', 'description', 'priority', 'deadline']
-    changes = []
+    if not can_edit_task(user, task):
+        raise PermissionError("You do not have permission to edit this task")
+    
+    changed_fields = []
     
     with transaction.atomic():
-        for field in editable_fields:
-            if field in kwargs:
-                new_value = kwargs[field]
-                old_value = getattr(task, field)
-                
-                # Process field-specific validation
-                if field == 'title':
-                    if not new_value or not new_value.strip():
-                        raise ValidationError("Task title cannot be empty.")
-                    new_value = new_value.strip()
-                
-                elif field == 'description':
-                    new_value = new_value.strip() if new_value else ''
-                
-                elif field == 'priority':
-                    valid_priorities = ['low', 'medium', 'high', 'critical']
-                    if new_value not in valid_priorities:
-                        raise ValidationError(f"Invalid priority: {new_value}")
-                
-                elif field == 'deadline':
-                    # Allow clearing deadline (None) or future dates
-                    if new_value and new_value < timezone.now():
-                        raise ValidationError("Deadline cannot be in the past.")
-                
-                # Check if value actually changed
-                if old_value != new_value:
-                    # Format values for logging
-                    if field == 'deadline':
-                        old_display = old_value.strftime('%d %b %Y, %I:%M %p') if old_value else 'None'
-                        new_display = new_value.strftime('%d %b %Y, %I:%M %p') if new_value else 'None'
-                    elif field == 'priority':
-                        old_display = old_value.capitalize() if old_value else 'None'
-                        new_display = new_value.capitalize() if new_value else 'None'
-                    else:
-                        old_display = str(old_value) if old_value else 'None'
-                        new_display = str(new_value) if new_value else 'None'
-                    
-                    changes.append({
-                        'field': field,
-                        'old_value': old_display,
-                        'new_value': new_display
-                    })
-                    
-                    setattr(task, field, new_value)
+        # Track and apply changes
+        if 'title' in kwargs and kwargs['title'] != task.title:
+            old_value = task.title
+            task.title = kwargs['title']
+            changed_fields.append(('title', old_value, kwargs['title']))
         
-        if changes:
+        if 'description' in kwargs and kwargs['description'] != task.description:
+            old_value = task.description
+            task.description = kwargs['description']
+            changed_fields.append(('description', old_value[:100] + '...' if len(old_value) > 100 else old_value, 
+                                   kwargs['description'][:100] + '...' if len(kwargs['description']) > 100 else kwargs['description']))
+        
+        if 'priority' in kwargs and kwargs['priority'] != task.priority:
+            old_value = task.get_priority_display()
+            task.priority = kwargs['priority']
+            changed_fields.append(('priority', old_value, task.get_priority_display()))
+        
+        if 'deadline' in kwargs:
+            new_deadline = kwargs['deadline']
+            if (task.deadline is None and new_deadline is not None) or \
+               (task.deadline is not None and new_deadline is None) or \
+               (task.deadline != new_deadline):
+                old_value = task.deadline.strftime('%d %b %Y, %I:%M %p') if task.deadline else 'No deadline'
+                task.deadline = new_deadline
+                new_display = new_deadline.strftime('%d %b %Y, %I:%M %p') if new_deadline else 'No deadline'
+                changed_fields.append(('deadline', old_value, new_display))
+        
+        if changed_fields:
             task.save()
             
-            # Log each change
-            for change in changes:
+            # Log each field change
+            for field_name, old_value, new_value in changed_fields:
                 log_task_activity(
                     task=task,
                     user=user,
-                    action_type=TaskActivity.ActionType.UPDATED,
-                    description=f'{change["field"].replace("_", " ").title()} changed from "{change["old_value"]}" to "{change["new_value"]}"',
-                    field_name=change['field'],
-                    old_value=change['old_value'],
-                    new_value=change['new_value']
+                    action_type='updated',
+                    description=f'{field_name.replace("_", " ").title()} changed from "{old_value}" to "{new_value}"',
+                    field_name=field_name,
+                    old_value=str(old_value),
+                    new_value=str(new_value)
                 )
     
     return task
 
 
+# =============================================================================
+# Status Changes
+# =============================================================================
+
 def change_status(task, user, new_status):
     """
     Change task status with workflow validation.
     
-    Workflow Rules:
+    Workflow:
     - Delegated: pending → in_progress → completed → verified
-    - Personal: pending → in_progress → completed (terminal)
-    - Any status can go to cancelled (with permission)
+    - Personal: pending → in_progress → completed (no verification)
+    - Any status can go to cancelled
     
     Args:
         task: Task instance
-        user: User changing the status
-        new_status: Target status
+        user: User making the change
+        new_status: New status value
     
     Returns:
         Updated Task instance
     
     Raises:
-        PermissionDenied: If user cannot change status
-        ValidationError: If transition is invalid
+        PermissionError: If user cannot change status
+        ValidationError: If status transition is invalid
     """
-    if not can_change_status(user, task):
-        raise PermissionDenied("You don't have permission to change this task's status.")
+    from .permissions import can_change_status
     
-    old_status = task.status
+    if not can_change_status(user, task):
+        raise PermissionError("You do not have permission to change this task's status")
     
     # Validate transition
-    if new_status == 'cancelled':
-        # Cancellation is handled by cancel_task()
-        raise ValidationError("Use cancel_task() to cancel tasks.")
-    
     if not task.can_transition_to(new_status):
         raise ValidationError(
-            f"Cannot change status from '{task.get_status_display()}' to "
-            f"'{dict(Task.Status.choices).get(new_status, new_status)}'."
+            f"Cannot transition from {task.get_status_display()} to {dict(Task.Status.choices).get(new_status)}"
         )
     
-    # Additional permission checks for specific transitions
-    if new_status == 'verified':
-        # Only creator can verify delegated tasks
-        if task.created_by_id != user.pk and user.role != 'admin':
-            raise PermissionDenied("Only the task creator can verify this task.")
-    
-    if new_status in ['in_progress', 'completed']:
-        # Only assignee can mark as in_progress or completed
-        if task.assignee_id != user.pk and user.role != 'admin':
-            raise PermissionDenied("Only the assignee can update this task's status.")
+    old_status = task.status
+    old_display = task.get_status_display()
     
     with transaction.atomic():
         task.status = new_status
         
-        # Set completion timestamp
+        # Set timestamps for terminal states
         if new_status == 'completed':
             task.completed_at = timezone.now()
+        elif new_status == 'cancelled':
+            task.cancelled_at = timezone.now()
+            task.cancelled_by = user
         
         task.save()
         
-        # Log activity
+        # Determine action type for logging
+        if new_status == 'verified':
+            action_type = 'verified'
+            description = f'Task verified by {user.get_full_name()}'
+        elif new_status == 'cancelled':
+            action_type = 'cancelled'
+            description = f'Task cancelled by {user.get_full_name()}'
+        else:
+            action_type = 'status_changed'
+            description = f'Status changed from {old_display} to {task.get_status_display()}'
+        
         log_task_activity(
             task=task,
             user=user,
-            action_type=TaskActivity.ActionType.STATUS_CHANGED,
-            description=f'Status changed from {dict(Task.Status.choices).get(old_status)} to {dict(Task.Status.choices).get(new_status)}',
+            action_type=action_type,
+            description=description,
             field_name='status',
             old_value=old_status,
             new_value=new_status
         )
         
-        # Send notifications based on status change
-        if new_status == 'completed' and task.is_delegated:
-            # Notify creator that task is completed (Phase 9)
-            _notify_task_completed(task)
-        
-        elif new_status == 'verified':
-            # Notify assignee that task is verified (Phase 9)
-            _notify_task_verified(task)
+        # TODO: Send notifications (Phase 9)
+        # if new_status == 'completed' and task.task_type == 'delegated':
+        #     notify_task_completed(task)
+        # elif new_status == 'verified':
+        #     notify_task_verified(task)
     
     return task
 
 
+# =============================================================================
+# Task Reassignment
+# =============================================================================
+
 def reassign_task(task, user, new_assignee):
     """
     Reassign task to a new user.
-    Only task creator (or admin) can reassign.
+    Only task creator or admin can reassign.
     Old assignee is NOT notified. Overdue clock does NOT reset.
     
     Args:
         task: Task instance
-        user: User performing the reassignment
-        new_assignee: New assignee User
+        user: User making the change
+        new_assignee: New assignee User instance
     
     Returns:
         Updated Task instance
     
     Raises:
-        PermissionDenied: If user cannot reassign
-        ValidationError: If assignment is invalid
+        PermissionError: If user cannot reassign
     """
+    from .permissions import can_reassign_task, can_assign_to
+    
     if not can_reassign_task(user, task):
-        raise PermissionDenied("You don't have permission to reassign this task.")
+        raise PermissionError("You do not have permission to reassign this task")
     
-    # Check if new assignee is active
-    if not new_assignee.is_active:
-        raise ValidationError("Cannot reassign task to inactive user.")
+    if not can_assign_to(user, new_assignee):
+        raise PermissionError(f"You cannot assign tasks to {new_assignee.get_full_name()}")
     
-    # Check if new assignee has a department
-    if not new_assignee.department:
-        raise ValidationError(f"User {new_assignee.get_full_name()} is not assigned to any department.")
-    
-    # Validate assignment permissions
-    if not can_assign_to_user(user, new_assignee):
-        raise PermissionDenied("You don't have permission to assign tasks to this user.")
-    
-    # Check if reassigning to same user
     if task.assignee_id == new_assignee.pk:
-        raise ValidationError("Task is already assigned to this user.")
+        raise ValidationError("Task is already assigned to this user")
     
     old_assignee = task.assignee
     
     with transaction.atomic():
         task.assignee = new_assignee
         task.department = new_assignee.department
-        
-        # Update task_type if needed
-        if new_assignee.pk == task.created_by_id:
-            task.task_type = Task.TaskType.PERSONAL
-        else:
-            task.task_type = Task.TaskType.DELEGATED
-        
+        # Note: task_type stays 'delegated' since it was already assigned to someone else
         task.save()
         
-        # Log activity
         log_task_activity(
             task=task,
             user=user,
-            action_type=TaskActivity.ActionType.REASSIGNED,
+            action_type='reassigned',
             description=f'Reassigned from {old_assignee.get_full_name()} to {new_assignee.get_full_name()}',
             field_name='assignee',
             old_value=old_assignee.email,
             new_value=new_assignee.email
         )
         
-        # Notify new assignee only (old assignee NOT notified)
-        _notify_task_assigned(task)
+        # TODO: Notify new assignee only (Phase 9)
+        # notify_task_assigned(task)
     
     return task
 
+
+# =============================================================================
+# Task Cancellation
+# =============================================================================
 
 def cancel_task(task, user, reason=None):
     """
@@ -370,47 +311,47 @@ def cancel_task(task, user, reason=None):
     
     Args:
         task: Task instance
-        user: User cancelling the task
+        user: User making the change
         reason: Optional cancellation reason
     
     Returns:
         Updated Task instance
     
     Raises:
-        PermissionDenied: If user cannot cancel
+        PermissionError: If user cannot cancel
     """
-    if not can_cancel_task(user, task):
-        raise PermissionDenied("You don't have permission to cancel this task.")
+    from .permissions import can_cancel_task
     
-    old_status = task.status
+    if not can_cancel_task(user, task):
+        raise PermissionError("You do not have permission to cancel this task")
     
     with transaction.atomic():
-        task.status = Task.Status.CANCELLED
+        task.status = 'cancelled'
         task.cancelled_at = timezone.now()
         task.cancelled_by = user
         task.save()
         
-        # Log activity
-        description = 'Task cancelled'
+        description = f'Task cancelled by {user.get_full_name()}'
         if reason:
-            description += f': {reason}'
+            description += f'. Reason: {reason}'
         
         log_task_activity(
             task=task,
             user=user,
-            action_type=TaskActivity.ActionType.CANCELLED,
-            description=description,
-            field_name='status',
-            old_value=old_status,
-            new_value='cancelled'
+            action_type='cancelled',
+            description=description
         )
         
-        # Notify assignee (Phase 9)
-        if task.assignee_id != user.pk:
-            _notify_task_cancelled(task, reason)
+        # TODO: Notify assignee (Phase 9)
+        # if task.task_type == 'delegated':
+        #     notify_task_cancelled(task, reason)
     
     return task
 
+
+# =============================================================================
+# Comments
+# =============================================================================
 
 def add_comment(task, user, content):
     """
@@ -419,20 +360,18 @@ def add_comment(task, user, content):
     Args:
         task: Task instance
         user: User adding the comment
-        content: Comment content
+        content: Comment text
     
     Returns:
         Created Comment instance
-    
-    Raises:
-        PermissionDenied: If user cannot comment
-        ValidationError: If content is empty
     """
+    from .permissions import can_add_comment
+    
     if not can_add_comment(user, task):
-        raise PermissionDenied("You cannot add comments to this task.")
+        raise PermissionError("You cannot add comments to this task")
     
     if not content or not content.strip():
-        raise ValidationError("Comment cannot be empty.")
+        raise ValidationError("Comment cannot be empty")
     
     with transaction.atomic():
         comment = Comment.objects.create(
@@ -441,67 +380,65 @@ def add_comment(task, user, content):
             content=content.strip()
         )
         
-        # Log activity
         log_task_activity(
             task=task,
             user=user,
-            action_type=TaskActivity.ActionType.COMMENTED,
+            action_type='commented',
             description=f'Comment added: "{content[:50]}{"..." if len(content) > 50 else ""}"'
         )
     
     return comment
 
 
+# =============================================================================
+# Attachments
+# =============================================================================
+
 def add_or_replace_attachment(task, user, file):
     """
     Add or replace task attachment.
-    Each task can have only one attachment.
     
     Args:
         task: Task instance
         user: User uploading the file
-        file: UploadedFile instance
+        file: Uploaded file object
     
     Returns:
         Created/Updated Attachment instance
     
     Raises:
-        PermissionDenied: If user cannot add attachment
-        ValidationError: If file validation fails
+        ValidationError: If file is invalid
     """
-    if not can_add_attachment(user, task):
-        raise PermissionDenied("You don't have permission to add attachments to this task.")
+    from .permissions import can_add_attachment
     
-    # Validate file size (2 MB max)
-    max_size = Attachment.MAX_SIZE_BYTES
-    if file.size > max_size:
-        raise ValidationError(f"File size cannot exceed {Attachment.MAX_SIZE_MB} MB.")
+    if not can_add_attachment(user, task):
+        raise PermissionError("You cannot add attachments to this task")
+    
+    # Validate file size
+    if file.size > Attachment.MAX_SIZE_BYTES:
+        raise ValidationError(f"File size cannot exceed {Attachment.MAX_SIZE_MB} MB")
     
     # Validate file extension
     import os
     ext = os.path.splitext(file.name)[1].lower().lstrip('.')
     if ext not in Attachment.ALLOWED_EXTENSIONS:
-        allowed = ', '.join(Attachment.ALLOWED_EXTENSIONS).upper()
-        raise ValidationError(f"File type not allowed. Allowed types: {allowed}")
+        raise ValidationError(
+            f"File type not allowed. Allowed types: {', '.join(Attachment.ALLOWED_EXTENSIONS)}"
+        )
     
     with transaction.atomic():
-        # Check for existing attachment
-        existing = None
+        # Check if attachment already exists
         try:
             existing = task.attachment
+            # Delete old file
+            if existing.file:
+                existing.file.delete(save=False)
+            existing.delete()
+            action_type = 'attachment_replaced'
+            description = f'Attachment replaced: {file.name}'
         except Attachment.DoesNotExist:
-            pass
-        
-        if existing:
-            # Replace existing attachment
-            old_filename = existing.filename
-            existing.delete()  # This also deletes the file from storage
-            
-            action_type = TaskActivity.ActionType.ATTACHMENT_REPLACED
-            description = f'Attachment replaced: "{old_filename}" → "{file.name}"'
-        else:
-            action_type = TaskActivity.ActionType.ATTACHMENT_ADDED
-            description = f'Attachment added: "{file.name}"'
+            action_type = 'attachment_added'
+            description = f'Attachment added: {file.name}'
         
         # Create new attachment
         attachment = Attachment.objects.create(
@@ -512,7 +449,6 @@ def add_or_replace_attachment(task, user, file):
             file_size=file.size
         )
         
-        # Log activity
         log_task_activity(
             task=task,
             user=user,
@@ -523,181 +459,34 @@ def add_or_replace_attachment(task, user, file):
     return attachment
 
 
-def delete_attachment(task, user):
+def remove_attachment(task, user):
     """
-    Delete task attachment.
+    Remove task attachment.
     
     Args:
         task: Task instance
-        user: User deleting the attachment
-    
-    Returns:
-        bool: True if attachment was deleted
-    
-    Raises:
-        PermissionDenied: If user cannot delete attachment
-        ValidationError: If no attachment exists
+        user: User removing the attachment
     """
-    if not can_add_attachment(user, task):
-        raise PermissionDenied("You don't have permission to delete attachments from this task.")
+    from .permissions import can_remove_attachment
+    
+    if not can_remove_attachment(user, task):
+        raise PermissionError("You cannot remove this attachment")
     
     try:
         attachment = task.attachment
-    except Attachment.DoesNotExist:
-        raise ValidationError("This task has no attachment.")
-    
-    filename = attachment.filename
-    
-    with transaction.atomic():
-        attachment.delete()
+        filename = attachment.filename
         
-        # Log activity
-        log_task_activity(
-            task=task,
-            user=user,
-            action_type=TaskActivity.ActionType.ATTACHMENT_REPLACED,
-            description=f'Attachment removed: "{filename}"'
-        )
-    
-    return True
-
-
-# =============================================================================
-# Notification Stubs (Will be implemented in Phase 9)
-# =============================================================================
-
-def _notify_task_assigned(task):
-    """
-    Send notification when a task is assigned.
-    Only for delegated tasks (assignee != creator).
-    
-    Will be implemented in Phase 9.
-    """
-    # TODO: Implement in Phase 9
-    # from apps.notifications.services import notify_task_assigned
-    # notify_task_assigned(task)
-    pass
-
-
-def _notify_task_completed(task):
-    """
-    Send notification to creator when a delegated task is completed.
-    
-    Will be implemented in Phase 9.
-    """
-    # TODO: Implement in Phase 9
-    pass
-
-
-def _notify_task_verified(task):
-    """
-    Send notification to assignee when task is verified.
-    
-    Will be implemented in Phase 9.
-    """
-    # TODO: Implement in Phase 9
-    pass
-
-
-def _notify_task_cancelled(task, reason=None):
-    """
-    Send notification to assignee when task is cancelled.
-    
-    Will be implemented in Phase 9.
-    """
-    # TODO: Implement in Phase 9
-    pass
-
-
-# =============================================================================
-# Query Helpers
-# =============================================================================
-
-def get_tasks_for_user(user, tab='assigned_to_me'):
-    """
-    Get filtered task queryset based on user role and selected tab.
-    
-    Args:
-        user: Current user
-        tab: One of 'my_personal', 'assigned_to_me', 'i_assigned'
-    
-    Returns:
-        QuerySet of Task objects
-    """
-    base_qs = Task.objects.select_related(
-        'assignee', 'created_by', 'department'
-    ).prefetch_related('comments')
-    
-    if tab == 'my_personal':
-        # Personal tasks: created by me AND assigned to me
-        return base_qs.filter(
-            created_by=user,
-            assignee=user,
-            task_type=Task.TaskType.PERSONAL
-        ).exclude(status='cancelled')
-    
-    elif tab == 'assigned_to_me':
-        # Delegated tasks assigned to me (NOT my personal tasks)
-        return base_qs.filter(
-            assignee=user,
-            task_type=Task.TaskType.DELEGATED
-        ).exclude(status='cancelled')
-    
-    elif tab == 'i_assigned':
-        # Tasks I delegated to others
-        return base_qs.filter(
-            created_by=user,
-            task_type=Task.TaskType.DELEGATED
-        ).exclude(assignee=user).exclude(status='cancelled')
-    
-    return base_qs.none()
-
-
-def get_task_counts(user):
-    """
-    Get task counts for dashboard badges.
-    
-    Args:
-        user: Current user
-    
-    Returns:
-        dict with counts for each tab
-    """
-    from django.db.models import Q, Count
-    
-    # Personal tasks (pending + in_progress)
-    personal_count = Task.objects.filter(
-        created_by=user,
-        assignee=user,
-        task_type=Task.TaskType.PERSONAL,
-        status__in=['pending', 'in_progress']
-    ).count()
-    
-    # Assigned to me (delegated, pending + in_progress)
-    assigned_to_me_count = Task.objects.filter(
-        assignee=user,
-        task_type=Task.TaskType.DELEGATED,
-        status__in=['pending', 'in_progress']
-    ).count()
-    
-    # I assigned (delegated to others, pending + in_progress)
-    i_assigned_count = Task.objects.filter(
-        created_by=user,
-        task_type=Task.TaskType.DELEGATED,
-        status__in=['pending', 'in_progress']
-    ).exclude(assignee=user).count()
-    
-    # Overdue tasks (assigned to me)
-    overdue_count = Task.objects.filter(
-        assignee=user,
-        status__in=['pending', 'in_progress'],
-        deadline__lt=timezone.now()
-    ).exclude(deadline__isnull=True).count()
-    
-    return {
-        'my_personal': personal_count,
-        'assigned_to_me': assigned_to_me_count,
-        'i_assigned': i_assigned_count,
-        'overdue': overdue_count,
-        'total_pending': personal_count + assigned_to_me_count,
-    }
+        with transaction.atomic():
+            # Delete file from storage
+            if attachment.file:
+                attachment.file.delete(save=False)
+            attachment.delete()
+            
+            log_task_activity(
+                task=task,
+                user=user,
+                action_type='updated',
+                description=f'Attachment removed: {filename}'
+            )
+    except Attachment.DoesNotExist:
+        raise ValidationError("No attachment to remove")

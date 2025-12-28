@@ -1,149 +1,289 @@
 """
 Views for tasks app.
 
-Task management views including:
-- Dashboard with tabs
-- Task list view
-- Task create/edit
-- Task detail
-- Status changes
-- Reassignment
-- Cancellation
-- Comments (HTMX)
-- Attachments
+Includes:
+- Dashboard with tabs (My Personal, Assigned to Me, I Assigned)
+- Task CRUD operations
+- Task list with filtering and sorting
+- Status changes (form and HTMX quick change)
+- Comments and attachments
 """
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import HttpResponse, HttpResponseForbidden, FileResponse, Http404
-from django.views.decorators.http import require_http_methods, require_POST, require_GET
-from django.core.paginator import Paginator
-from django.db.models import Q
+from django.http import HttpResponse, HttpResponseForbidden, FileResponse
+from django.views.decorators.http import require_http_methods, require_POST
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db.models import Q, Count
 from django.utils import timezone
 
 from .models import Task, Comment, Attachment
-from .forms import (
-    TaskForm, TaskEditForm, ReassignTaskForm, CancelTaskForm,
-    StatusChangeForm, CommentForm, AttachmentForm
-)
+from .forms import TaskForm, CommentForm, AttachmentForm, TaskStatusForm
 from .services import (
-    create_task, update_task, change_status, reassign_task,
-    cancel_task, add_comment, add_or_replace_attachment, delete_attachment,
-    get_tasks_for_user, get_task_counts
+    create_task, update_task, change_status, reassign_task, 
+    cancel_task, add_comment, add_or_replace_attachment,
+    remove_attachment
 )
 from .permissions import (
     can_view_task, can_edit_task, can_change_status,
-    can_reassign_task, can_cancel_task, can_add_comment, can_add_attachment, require_task_permission
+    can_cancel_task, can_reassign_task, get_viewable_tasks
 )
+from .filters import TaskFilter, DashboardTaskFilter, get_sorting_options, apply_sorting
+from apps.departments.models import Department
+from apps.accounts.models import User
 
+
+# =============================================================================
+# Dashboard Views
+# =============================================================================
 
 @login_required
 def dashboard(request):
     """
-    Main dashboard view with tabs:
-    - My Personal Tasks
-    - Assigned to Me
-    - I Assigned
+    Main dashboard view with three tabs:
+    - My Personal Tasks (tasks I created for myself)
+    - Assigned to Me (tasks others delegated to me)
+    - I Assigned (tasks I delegated to others)
     """
-    tab = request.GET.get('tab', 'assigned_to_me')
-    valid_tabs = ['my_personal', 'assigned_to_me', 'i_assigned']
-    if tab not in valid_tabs:
-        tab = 'assigned_to_me'
+    user = request.user
+    tab = request.GET.get('tab', 'personal')
+    
+    # Base querysets for each tab
+    personal_tasks = Task.objects.filter(
+        created_by=user,
+        assignee=user,
+        task_type='personal'
+    ).exclude(status__in=['cancelled', 'verified', 'completed'])
+    
+    assigned_to_me = Task.objects.filter(
+        assignee=user,
+        task_type='delegated'
+    ).exclude(status__in=['cancelled', 'verified'])
+    
+    i_assigned = Task.objects.filter(
+        created_by=user,
+        task_type='delegated'
+    ).exclude(assignee=user).exclude(status__in=['cancelled', 'verified'])
+    
+    # Get counts for tabs
+    personal_count = personal_tasks.count()
+    assigned_count = assigned_to_me.count()
+    i_assigned_count = i_assigned.count()
     
     # Get tasks for current tab
-    tasks = get_tasks_for_user(request.user, tab)
-    
-    # Apply sorting
-    sort = request.GET.get('sort', '-created_at')
-    valid_sorts = ['deadline', '-deadline', 'created_at', '-created_at', 'priority', '-priority', 'status', '-status']
-    if sort not in valid_sorts:
-        sort = '-created_at'
-    
-    # Special handling for priority sort (custom order)
-    if sort in ['priority', '-priority']:
-        from django.db.models import Case, When, Value, IntegerField
-        priority_order = Case(
-            When(priority='critical', then=Value(1)),
-            When(priority='high', then=Value(2)),
-            When(priority='medium', then=Value(3)),
-            When(priority='low', then=Value(4)),
-            output_field=IntegerField(),
-        )
-        if sort == '-priority':
-            tasks = tasks.annotate(priority_order=priority_order).order_by('priority_order')
-        else:
-            tasks = tasks.annotate(priority_order=priority_order).order_by('-priority_order')
+    if tab == 'personal':
+        queryset = personal_tasks
+    elif tab == 'assigned':
+        queryset = assigned_to_me
+    elif tab == 'delegated':
+        queryset = i_assigned
     else:
-        tasks = tasks.order_by(sort)
+        queryset = personal_tasks
+        tab = 'personal'
     
     # Apply filters
-    status_filter = request.GET.get('status', '')
-    if status_filter:
-        tasks = tasks.filter(status=status_filter)
+    search = request.GET.get('search', '')
+    status_filter = request.GET.getlist('status')
+    priority_filter = request.GET.getlist('priority')
     
-    priority_filter = request.GET.get('priority', '')
-    if priority_filter:
-        tasks = tasks.filter(priority=priority_filter)
-    
-    # Search
-    search = request.GET.get('search', '').strip()
     if search:
-        tasks = tasks.filter(
+        queryset = queryset.filter(
             Q(title__icontains=search) |
             Q(description__icontains=search) |
             Q(reference_number__icontains=search)
         )
     
-    # Pagination
-    paginator = Paginator(tasks, 20)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    if status_filter:
+        queryset = queryset.filter(status__in=status_filter)
     
-    # Get counts for badges
-    counts = get_task_counts(request.user)
+    if priority_filter:
+        queryset = queryset.filter(priority__in=priority_filter)
+    
+    # Order by deadline (nulls last), then by created_at
+    queryset = queryset.select_related(
+        'assignee', 'created_by', 'department'
+    ).order_by(
+        'status',  # pending first
+        '-priority',  # high priority first
+        'deadline',  # earliest deadline first
+        '-created_at'
+    )
+    
+    # Pagination
+    paginator = Paginator(queryset, 20)
+    page = request.GET.get('page', 1)
+    
+    try:
+        tasks = paginator.page(page)
+    except PageNotAnInteger:
+        tasks = paginator.page(1)
+    except EmptyPage:
+        tasks = paginator.page(paginator.num_pages)
     
     context = {
+        'tasks': tasks,
         'tab': tab,
-        'page_obj': page_obj,
-        'counts': counts,
-        'status_filter': status_filter,
-        'priority_filter': priority_filter,
+        'personal_count': personal_count,
+        'assigned_count': assigned_count,
+        'i_assigned_count': i_assigned_count,
         'search': search,
-        'sort': sort,
+        'selected_statuses': status_filter,
+        'selected_priorities': priority_filter,
         'status_choices': Task.Status.choices,
         'priority_choices': Task.Priority.choices,
     }
     
-    # Handle HTMX partial request
+    # Handle HTMX partial requests
     if request.htmx:
-        return render(request, 'tasks/partials/task_list.html', context)
+        return render(request, 'tasks/partials/dashboard_tasks.html', context)
     
     return render(request, 'tasks/dashboard.html', context)
 
+
+# =============================================================================
+# Task List View (Enhanced with Filters)
+# =============================================================================
+
+@login_required
+def task_list(request):
+    """
+    Full task list view with comprehensive filtering and sorting.
+    Accessible to all users, but content filtered by role.
+    """
+    user = request.user
+    
+    # Get base queryset based on user's role
+    queryset = get_viewable_tasks(user)
+    
+    # Apply TaskFilter
+    task_filter = TaskFilter(request.GET, queryset=queryset, request=request)
+    filtered_queryset = task_filter.qs
+    
+    # Apply sorting
+    sort_param = request.GET.get('sort', '-created_at')
+    sorted_queryset = apply_sorting(filtered_queryset, sort_param)
+    
+    # Pagination (20 per page as per spec)
+    paginator = Paginator(sorted_queryset, 20)
+    page = request.GET.get('page', 1)
+    
+    try:
+        tasks = paginator.page(page)
+    except PageNotAnInteger:
+        tasks = paginator.page(1)
+    except EmptyPage:
+        tasks = paginator.page(paginator.num_pages)
+    
+    # Determine which filters to show based on role
+    show_department_filter = user.role in ['admin', 'senior_manager_1', 'senior_manager_2', 'manager']
+    show_assignee_filter = user.role in ['admin', 'senior_manager_1', 'senior_manager_2', 'manager']
+    
+    # Get filter options
+    if show_department_filter:
+        if user.role in ['admin', 'senior_manager_1', 'senior_manager_2']:
+            departments = Department.objects.all().order_by('name')
+        else:
+            departments = Department.objects.filter(pk=user.department_id) if user.department else Department.objects.none()
+    else:
+        departments = Department.objects.none()
+    
+    if show_assignee_filter:
+        if user.role in ['admin', 'senior_manager_1', 'senior_manager_2']:
+            assignees = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+        elif user.department:
+            assignees = User.objects.filter(is_active=True, department=user.department).order_by('first_name', 'last_name')
+        else:
+            assignees = User.objects.none()
+    else:
+        assignees = User.objects.none()
+    
+    # Check for active filters
+    has_active_filters = any([
+        request.GET.get('search'),
+        request.GET.getlist('status'),
+        request.GET.getlist('priority'),
+        request.GET.get('deadline_filter'),
+        request.GET.get('department'),
+        request.GET.get('assignee'),
+        request.GET.get('task_type'),
+    ])
+    
+    # Parse selected values for template
+    try:
+        selected_department = int(request.GET.get('department', '')) if request.GET.get('department') else None
+    except ValueError:
+        selected_department = None
+    
+    try:
+        selected_assignee = int(request.GET.get('assignee', '')) if request.GET.get('assignee') else None
+    except ValueError:
+        selected_assignee = None
+    
+    context = {
+        'tasks': tasks,
+        'page_obj': tasks,
+        'total_count': paginator.count,
+        'filter': task_filter,
+        'sorting_options': get_sorting_options(),
+        'current_sort': sort_param,
+        'has_active_filters': has_active_filters,
+        'show_department_filter': show_department_filter,
+        'show_assignee_filter': show_assignee_filter,
+        'departments': departments,
+        'assignees': assignees,
+        'selected_statuses': request.GET.getlist('status'),
+        'selected_priorities': request.GET.getlist('priority'),
+        'selected_deadline_filter': request.GET.get('deadline_filter', ''),
+        'selected_deadline_from': request.GET.get('deadline_from', ''),
+        'selected_deadline_to': request.GET.get('deadline_to', ''),
+        'selected_task_type': request.GET.get('task_type', ''),
+        'selected_department': selected_department,
+        'selected_assignee': selected_assignee,
+    }
+    
+    # Handle HTMX requests - return only the task list content
+    if request.htmx:
+        return render(request, 'tasks/partials/task_list_content.html', context)
+    
+    return render(request, 'tasks/task_list.html', context)
+
+
+# =============================================================================
+# Task CRUD Views
+# =============================================================================
 
 @login_required
 def task_create(request):
     """Create a new task."""
     if request.method == 'POST':
-        form = TaskForm(request.POST, user=request.user)
+        form = TaskForm(request.POST, request.FILES, user=request.user)
         if form.is_valid():
             try:
                 task = create_task(
                     title=form.cleaned_data['title'],
+                    description=form.cleaned_data.get('description', ''),
                     assignee=form.cleaned_data['assignee'],
                     created_by=request.user,
-                    description=form.cleaned_data.get('description', ''),
                     deadline=form.cleaned_data.get('deadline'),
                     priority=form.cleaned_data.get('priority', 'medium'),
                 )
-                messages.success(
-                    request,
-                    f'Task "{task.reference_number}" created successfully.'
-                )
+                
+                # Handle attachment if provided
+                if 'attachment' in request.FILES:
+                    add_or_replace_attachment(
+                        task=task,
+                        user=request.user,
+                        file=request.FILES['attachment']
+                    )
+                
+                messages.success(request, f'Task {task.reference_number} created successfully.')
                 return redirect('tasks:task_detail', pk=task.pk)
-            except Exception as e:
+                
+            except PermissionError as e:
                 messages.error(request, str(e))
+            except Exception as e:
+                messages.error(request, f'Error creating task: {str(e)}')
     else:
         form = TaskForm(user=request.user)
     
@@ -156,19 +296,18 @@ def task_create(request):
 
 @login_required
 def task_detail(request, pk):
-    """View task details."""
+    """View task details with comments and attachment."""
     task = get_object_or_404(
-        Task.objects.select_related('assignee', 'created_by', 'department', 'cancelled_by'),
+        Task.objects.select_related(
+            'assignee', 'created_by', 'department', 'cancelled_by'
+        ).prefetch_related('comments__author', 'activities__user'),
         pk=pk
     )
     
     # Check view permission
     if not can_view_task(request.user, task):
-        messages.error(request, "You don't have permission to view this task.")
+        messages.error(request, 'You do not have permission to view this task.')
         return redirect('tasks:dashboard')
-    
-    # Get comments
-    comments = task.comments.select_related('author').order_by('created_at')
     
     # Get attachment if exists
     try:
@@ -176,29 +315,29 @@ def task_detail(request, pk):
     except Attachment.DoesNotExist:
         attachment = None
     
-    # Get activity log (last 10 entries)
-    activities = task.activities.select_related('user').order_by('-created_at')[:10]
-    
-    # Prepare forms
+    # Forms
     comment_form = CommentForm()
     attachment_form = AttachmentForm()
-    status_form = StatusChangeForm(task=task, user=request.user)
+    status_form = TaskStatusForm(task=task, user=request.user)
     
-    # Check permissions for action buttons
+    # Permissions for template
+    can_edit = can_edit_task(request.user, task)
+    can_status = can_change_status(request.user, task)
+    can_cancel = can_cancel_task(request.user, task)
+    can_reassign = can_reassign_task(request.user, task)
+    
     context = {
         'task': task,
-        'comments': comments,
+        'comments': task.comments.all().order_by('created_at'),
         'attachment': attachment,
-        'activities': activities,
+        'activities': task.activities.all()[:20],
         'comment_form': comment_form,
         'attachment_form': attachment_form,
         'status_form': status_form,
-        'can_edit': can_edit_task(request.user, task),
-        'can_change_status': can_change_status(request.user, task),
-        'can_reassign': can_reassign_task(request.user, task),
-        'can_cancel': can_cancel_task(request.user, task),
-        'can_comment': can_add_comment(request.user, task),
-        'can_attach': can_add_attachment(request.user, task),
+        'can_edit': can_edit,
+        'can_change_status': can_status,
+        'can_cancel': can_cancel,
+        'can_reassign': can_reassign,
     }
     
     return render(request, 'tasks/task_detail.html', context)
@@ -211,14 +350,14 @@ def task_edit(request, pk):
     
     # Check edit permission
     if not can_edit_task(request.user, task):
-        messages.error(request, "You don't have permission to edit this task.")
+        messages.error(request, 'You do not have permission to edit this task.')
         return redirect('tasks:task_detail', pk=pk)
     
     if request.method == 'POST':
-        form = TaskEditForm(request.POST, instance=task)
+        form = TaskForm(request.POST, instance=task, user=request.user)
         if form.is_valid():
             try:
-                update_task(
+                updated_task = update_task(
                     task=task,
                     user=request.user,
                     title=form.cleaned_data['title'],
@@ -228,10 +367,11 @@ def task_edit(request, pk):
                 )
                 messages.success(request, 'Task updated successfully.')
                 return redirect('tasks:task_detail', pk=pk)
+                
             except Exception as e:
-                messages.error(request, str(e))
+                messages.error(request, f'Error updating task: {str(e)}')
     else:
-        form = TaskEditForm(instance=task)
+        form = TaskForm(instance=task, user=request.user)
     
     return render(request, 'tasks/task_form.html', {
         'form': form,
@@ -241,94 +381,135 @@ def task_edit(request, pk):
     })
 
 
+# =============================================================================
+# Status Change Views
+# =============================================================================
+
 @login_required
-@require_POST
+@require_http_methods(["GET", "POST"])
 def task_status_change(request, pk):
-    """Change task status."""
+    """Change task status with form."""
     task = get_object_or_404(Task, pk=pk)
     
-    # Check permission
     if not can_change_status(request.user, task):
-        messages.error(request, "You don't have permission to change this task's status.")
-        return redirect('tasks:task_detail', pk=pk)
-    
-    form = StatusChangeForm(request.POST, task=task, user=request.user)
-    if form.is_valid():
-        try:
-            change_status(task, request.user, form.cleaned_data['new_status'])
-            new_status_display = dict(Task.Status.choices).get(form.cleaned_data['new_status'])
-            messages.success(request, f'Task status changed to "{new_status_display}".')
-        except Exception as e:
-            messages.error(request, str(e))
-    else:
-        for error in form.errors.values():
-            messages.error(request, error)
-    
-    # Handle HTMX request
-    if request.htmx:
-        return redirect('tasks:task_detail', pk=pk)
-    
-    return redirect('tasks:task_detail', pk=pk)
-
-
-@login_required
-def task_reassign(request, pk):
-    """Reassign task to a different user."""
-    task = get_object_or_404(Task, pk=pk)
-    
-    # Check permission
-    if not can_reassign_task(request.user, task):
-        messages.error(request, "You don't have permission to reassign this task.")
+        messages.error(request, 'You do not have permission to change this task\'s status.')
         return redirect('tasks:task_detail', pk=pk)
     
     if request.method == 'POST':
-        form = ReassignTaskForm(request.POST, user=request.user, task=task)
+        form = TaskStatusForm(request.POST, task=task, user=request.user)
         if form.is_valid():
             try:
-                reassign_task(task, request.user, form.cleaned_data['new_assignee'])
-                messages.success(
-                    request,
-                    f'Task reassigned to {form.cleaned_data["new_assignee"].get_full_name()}.'
-                )
+                new_status = form.cleaned_data['status']
+                change_status(task, request.user, new_status)
+                messages.success(request, f'Task status changed to {task.get_status_display()}.')
                 return redirect('tasks:task_detail', pk=pk)
             except Exception as e:
                 messages.error(request, str(e))
     else:
-        form = ReassignTaskForm(user=request.user, task=task)
+        form = TaskStatusForm(task=task, user=request.user)
     
-    return render(request, 'tasks/task_reassign.html', {
-        'form': form,
+    return render(request, 'tasks/task_status_change.html', {
         'task': task,
+        'form': form,
     })
 
 
 @login_required
-def task_cancel(request, pk):
-    """Cancel a task."""
+@require_POST
+def quick_status_change(request, pk):
+    """
+    HTMX endpoint for quick status changes from list view.
+    Returns updated task list content.
+    """
     task = get_object_or_404(Task, pk=pk)
     
-    # Check permission
-    if not can_cancel_task(request.user, task):
-        messages.error(request, "You don't have permission to cancel this task.")
+    if not can_change_status(request.user, task):
+        return HttpResponseForbidden('Permission denied')
+    
+    new_status = request.POST.get('status')
+    if not new_status:
+        return HttpResponse('Status required', status=400)
+    
+    try:
+        change_status(task, request.user, new_status)
+        messages.success(request, f'Task marked as {task.get_status_display()}.')
+    except Exception as e:
+        messages.error(request, str(e))
+    
+    # Return to task list with current filters
+    return task_list(request)
+
+
+# =============================================================================
+# Task Reassign & Cancel Views
+# =============================================================================
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def task_reassign(request, pk):
+    """Reassign task to a different user."""
+    task = get_object_or_404(Task, pk=pk)
+    
+    if not can_reassign_task(request.user, task):
+        messages.error(request, 'You do not have permission to reassign this task.')
         return redirect('tasks:task_detail', pk=pk)
     
     if request.method == 'POST':
-        form = CancelTaskForm(request.POST)
-        if form.is_valid():
+        new_assignee_id = request.POST.get('assignee')
+        if new_assignee_id:
             try:
-                cancel_task(task, request.user, form.cleaned_data.get('reason'))
-                messages.success(request, 'Task cancelled successfully.')
-                return redirect('tasks:dashboard')
+                new_assignee = User.objects.get(pk=new_assignee_id, is_active=True)
+                reassign_task(task, request.user, new_assignee)
+                messages.success(request, f'Task reassigned to {new_assignee.get_full_name()}.')
+                return redirect('tasks:task_detail', pk=pk)
+            except User.DoesNotExist:
+                messages.error(request, 'Selected user not found.')
             except Exception as e:
                 messages.error(request, str(e))
-    else:
-        form = CancelTaskForm()
     
-    return render(request, 'tasks/task_cancel.html', {
-        'form': form,
+    # Get possible assignees based on user's role
+    user = request.user
+    if user.role in ['admin', 'senior_manager_1', 'senior_manager_2']:
+        assignees = User.objects.filter(is_active=True).exclude(pk=task.assignee_id)
+    elif user.role == 'manager' and user.department:
+        assignees = User.objects.filter(
+            is_active=True,
+            department=user.department
+        ).exclude(pk=task.assignee_id)
+    else:
+        assignees = User.objects.none()
+    
+    return render(request, 'tasks/task_reassign.html', {
         'task': task,
+        'assignees': assignees.order_by('first_name', 'last_name'),
     })
 
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def task_cancel(request, pk):
+    """Cancel a task with optional reason."""
+    task = get_object_or_404(Task, pk=pk)
+    
+    if not can_cancel_task(request.user, task):
+        messages.error(request, 'You do not have permission to cancel this task.')
+        return redirect('tasks:task_detail', pk=pk)
+    
+    if request.method == 'POST':
+        reason = request.POST.get('reason', '')
+        try:
+            cancel_task(task, request.user, reason)
+            messages.success(request, 'Task cancelled successfully.')
+            return redirect('tasks:task_detail', pk=pk)
+        except Exception as e:
+            messages.error(request, str(e))
+    
+    return render(request, 'tasks/task_cancel.html', {'task': task})
+
+
+# =============================================================================
+# Comment Views
+# =============================================================================
 
 @login_required
 @require_POST
@@ -336,33 +517,42 @@ def add_comment_view(request, pk):
     """Add a comment to a task (HTMX endpoint)."""
     task = get_object_or_404(Task, pk=pk)
     
-    # Check permission
-    if not can_add_comment(request.user, task):
-        return HttpResponseForbidden("You cannot add comments to this task.")
+    if not can_view_task(request.user, task):
+        return HttpResponseForbidden('Permission denied')
     
     form = CommentForm(request.POST)
     if form.is_valid():
         try:
-            comment = add_comment(task, request.user, form.cleaned_data['content'])
+            comment = add_comment(
+                task=task,
+                user=request.user,
+                content=form.cleaned_data['content']
+            )
             
             if request.htmx:
                 # Return just the new comment for HTMX append
                 return render(request, 'tasks/partials/comment.html', {
                     'comment': comment,
+                    'task': task,
                 })
             
             messages.success(request, 'Comment added.')
+            return redirect('tasks:task_detail', pk=pk)
+            
         except Exception as e:
             if request.htmx:
-                return HttpResponse(f'<p class="text-red-600">{str(e)}</p>')
+                return HttpResponse(f'Error: {str(e)}', status=400)
             messages.error(request, str(e))
-    else:
-        if request.htmx:
-            return HttpResponse('<p class="text-red-600">Comment cannot be empty.</p>')
-        messages.error(request, 'Comment cannot be empty.')
+    
+    if request.htmx:
+        return HttpResponse('Invalid comment', status=400)
     
     return redirect('tasks:task_detail', pk=pk)
 
+
+# =============================================================================
+# Attachment Views
+# =============================================================================
 
 @login_required
 @require_POST
@@ -370,68 +560,75 @@ def upload_attachment(request, pk):
     """Upload or replace task attachment."""
     task = get_object_or_404(Task, pk=pk)
     
-    # Check permission
-    if not can_add_attachment(request.user, task):
-        messages.error(request, "You don't have permission to add attachments.")
+    if not can_view_task(request.user, task):
+        messages.error(request, 'Permission denied')
         return redirect('tasks:task_detail', pk=pk)
     
     form = AttachmentForm(request.POST, request.FILES)
-    if form.is_valid():
+    if form.is_valid() and 'file' in request.FILES:
         try:
-            add_or_replace_attachment(task, request.user, form.cleaned_data['file'])
+            add_or_replace_attachment(
+                task=task,
+                user=request.user,
+                file=request.FILES['file']
+            )
             messages.success(request, 'Attachment uploaded successfully.')
         except Exception as e:
             messages.error(request, str(e))
     else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                messages.error(request, error)
+        messages.error(request, 'Please select a valid file.')
     
     return redirect('tasks:task_detail', pk=pk)
 
 
 @login_required
-@require_POST
-def remove_attachment(request, pk):
-    """Remove task attachment."""
-    task = get_object_or_404(Task, pk=pk)
-    
-    # Check permission
-    if not can_add_attachment(request.user, task):
-        messages.error(request, "You don't have permission to remove attachments.")
-        return redirect('tasks:task_detail', pk=pk)
-    
-    try:
-        delete_attachment(task, request.user)
-        messages.success(request, 'Attachment removed.')
-    except Exception as e:
-        messages.error(request, str(e))
-    
-    return redirect('tasks:task_detail', pk=pk)
-
-
-@login_required
-@require_GET
 def download_attachment(request, pk):
     """Download task attachment."""
     task = get_object_or_404(Task, pk=pk)
     
-    # Check view permission
     if not can_view_task(request.user, task):
-        raise Http404("Attachment not found.")
+        return HttpResponseForbidden('Permission denied')
     
     try:
         attachment = task.attachment
+        return FileResponse(
+            attachment.file.open('rb'),
+            as_attachment=True,
+            filename=attachment.filename
+        )
     except Attachment.DoesNotExist:
-        raise Http404("Attachment not found.")
+        messages.error(request, 'No attachment found.')
+        return redirect('tasks:task_detail', pk=pk)
+
+
+@login_required
+@require_POST
+def remove_attachment_view(request, pk):
+    """Remove task attachment (HTMX endpoint)."""
+    task = get_object_or_404(Task, pk=pk)
     
-    # Serve file
-    response = FileResponse(
-        attachment.file.open('rb'),
-        as_attachment=True,
-        filename=attachment.filename
-    )
-    return response
+    if not can_edit_task(request.user, task):
+        return HttpResponseForbidden('Permission denied')
+    
+    try:
+        remove_attachment(task, request.user)
+        
+        if request.htmx:
+            # Return empty attachment section
+            return render(request, 'tasks/partials/attachment_section.html', {
+                'task': task,
+                'attachment': None,
+                'attachment_form': AttachmentForm(),
+                'can_edit': True,
+            })
+        
+        messages.success(request, 'Attachment removed.')
+    except Exception as e:
+        if request.htmx:
+            return HttpResponse(str(e), status=400)
+        messages.error(request, str(e))
+    
+    return redirect('tasks:task_detail', pk=pk)
 
 
 # =============================================================================
@@ -439,80 +636,38 @@ def download_attachment(request, pk):
 # =============================================================================
 
 @login_required
-def task_list_partial(request):
-    """
-    Return task list partial for HTMX updates.
-    Used for filtering, sorting, pagination without full page reload.
-    """
-    return dashboard(request)
-
-
-@login_required
-def task_row_partial(request, pk):
-    """Return single task row partial for HTMX updates."""
-    task = get_object_or_404(Task, pk=pk)
+def partials_task_row(request, pk):
+    """Return a single task row for HTMX updates."""
+    task = get_object_or_404(
+        Task.objects.select_related('assignee', 'created_by', 'department'),
+        pk=pk
+    )
     
     if not can_view_task(request.user, task):
-        return HttpResponse('')
+        return HttpResponseForbidden('Permission denied')
     
     return render(request, 'tasks/partials/task_row.html', {'task': task})
 
 
 @login_required
-def task_counts_partial(request):
-    """Return task counts for badge updates (HTMX polling)."""
-    counts = get_task_counts(request.user)
-    return render(request, 'tasks/partials/badge_counts.html', {'counts': counts})
-
-
-# =============================================================================
-# Quick Status Change (HTMX inline button)
-# =============================================================================
-
-@login_required
-@require_POST
-def quick_status_change(request, pk):
-    """
-    Quick status change via inline button.
-    Advances task to next logical status.
-    """
-    task = get_object_or_404(Task, pk=pk)
+def partials_badge_counts(request):
+    """Return badge counts for navigation."""
+    user = request.user
     
-    if not can_change_status(request.user, task):
-        if request.htmx:
-            return HttpResponse(
-                '<span class="text-red-600 text-sm">Permission denied</span>'
-            )
-        messages.error(request, "You don't have permission to change this task's status.")
-        return redirect('tasks:task_detail', pk=pk)
+    # Count pending tasks assigned to user
+    pending_count = Task.objects.filter(
+        assignee=user,
+        status__in=['pending', 'in_progress']
+    ).count()
     
-    next_status = task.get_next_status()
-    if not next_status:
-        if request.htmx:
-            return HttpResponse(
-                '<span class="text-gray-600 text-sm">No further actions</span>'
-            )
-        messages.info(request, "No further status changes available.")
-        return redirect('tasks:task_detail', pk=pk)
+    # Count overdue tasks
+    overdue_count = Task.objects.filter(
+        assignee=user,
+        status__in=['pending', 'in_progress'],
+        deadline__lt=timezone.now()
+    ).count()
     
-    try:
-        change_status(task, request.user, next_status)
-        
-        if request.htmx:
-            # Return updated status button
-            task.refresh_from_db()
-            return render(request, 'tasks/partials/status_button.html', {
-                'task': task,
-                'can_change_status': can_change_status(request.user, task),
-            })
-        
-        messages.success(
-            request,
-            f'Task status changed to "{task.get_status_display()}".'
-        )
-    except Exception as e:
-        if request.htmx:
-            return HttpResponse(f'<span class="text-red-600 text-sm">{str(e)}</span>')
-        messages.error(request, str(e))
-    
-    return redirect('tasks:task_detail', pk=pk)
+    return render(request, 'tasks/partials/badge_counts.html', {
+        'pending_count': pending_count,
+        'overdue_count': overdue_count,
+    })

@@ -1,0 +1,245 @@
+{% load task_tags %}
+{# Filter Controls Partial - HTMX powered #}
+
+<form id="filter-form" 
+      hx-get="{% url 'tasks:task_list' %}"
+      hx-target="#task-list-container"
+      hx-push-url="true"
+      hx-trigger="change from:select, change from:input[type=checkbox], change from:input[type=date]"
+      hx-indicator="#loading-indicator">
+    
+    <!-- Search -->
+    <div class="mb-6">
+        <label for="id_search" class="block text-sm font-medium text-gray-700 mb-1">
+            Search
+        </label>
+        <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+            </div>
+            <input type="text" 
+                   name="search" 
+                   id="id_search"
+                   value="{{ filter.form.search.value|default:'' }}"
+                   placeholder="Search tasks..."
+                   class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                   hx-get="{% url 'tasks:task_list' %}"
+                   hx-trigger="keyup changed delay:300ms"
+                   hx-target="#task-list-container"
+                   hx-push-url="true"
+                   hx-include="#filter-form">
+        </div>
+    </div>
+
+    <!-- Status Filter -->
+    <div class="mb-6">
+        <fieldset>
+            <legend class="block text-sm font-medium text-gray-700 mb-2">Status</legend>
+            <div class="space-y-2">
+                {% for choice in filter.form.status %}
+                <div class="flex items-center">
+                    <input type="checkbox" 
+                           name="status" 
+                           id="status_{{ choice.data.value }}"
+                           value="{{ choice.data.value }}"
+                           {% if choice.data.value in selected_statuses %}checked{% endif %}
+                           class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    <label for="status_{{ choice.data.value }}" class="ml-2 text-sm text-gray-700 flex items-center">
+                        {% status_dot choice.data.value %}
+                        <span class="ml-1">{{ choice.data.label }}</span>
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+        </fieldset>
+    </div>
+
+    <!-- Priority Filter -->
+    <div class="mb-6">
+        <fieldset>
+            <legend class="block text-sm font-medium text-gray-700 mb-2">Priority</legend>
+            <div class="space-y-2">
+                {% for choice in filter.form.priority %}
+                <div class="flex items-center">
+                    <input type="checkbox" 
+                           name="priority" 
+                           id="priority_{{ choice.data.value }}"
+                           value="{{ choice.data.value }}"
+                           {% if choice.data.value in selected_priorities %}checked{% endif %}
+                           class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    <label for="priority_{{ choice.data.value }}" class="ml-2 text-sm text-gray-700 flex items-center">
+                        {% priority_indicator choice.data.value %}
+                        <span class="ml-1">{{ choice.data.label }}</span>
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+        </fieldset>
+    </div>
+
+    <!-- Deadline Filter -->
+    <div class="mb-6">
+        <label for="id_deadline_filter" class="block text-sm font-medium text-gray-700 mb-1">
+            Deadline
+        </label>
+        <select name="deadline_filter" 
+                id="id_deadline_filter"
+                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            <option value="">All Deadlines</option>
+            <option value="today" {% if selected_deadline_filter == 'today' %}selected{% endif %}>Due Today</option>
+            <option value="tomorrow" {% if selected_deadline_filter == 'tomorrow' %}selected{% endif %}>Due Tomorrow</option>
+            <option value="this_week" {% if selected_deadline_filter == 'this_week' %}selected{% endif %}>Due This Week</option>
+            <option value="next_week" {% if selected_deadline_filter == 'next_week' %}selected{% endif %}>Due Next Week</option>
+            <option value="overdue" {% if selected_deadline_filter == 'overdue' %}selected{% endif %}>Overdue</option>
+            <option value="no_deadline" {% if selected_deadline_filter == 'no_deadline' %}selected{% endif %}>No Deadline</option>
+            <option value="custom" {% if selected_deadline_filter == 'custom' %}selected{% endif %}>Custom Range</option>
+        </select>
+        
+        <!-- Custom Date Range (shown when custom is selected) -->
+        <div id="custom-date-range" class="mt-3 space-y-3 {% if selected_deadline_filter != 'custom' %}hidden{% endif %}">
+            <div>
+                <label for="id_deadline_from" class="block text-xs font-medium text-gray-600 mb-1">From</label>
+                <input type="date" 
+                       name="deadline_from" 
+                       id="id_deadline_from"
+                       value="{{ selected_deadline_from|default:'' }}"
+                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+            <div>
+                <label for="id_deadline_to" class="block text-xs font-medium text-gray-600 mb-1">To</label>
+                <input type="date" 
+                       name="deadline_to" 
+                       id="id_deadline_to"
+                       value="{{ selected_deadline_to|default:'' }}"
+                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Type Filter -->
+    <div class="mb-6">
+        <label for="id_task_type" class="block text-sm font-medium text-gray-700 mb-1">
+            Task Type
+        </label>
+        <select name="task_type" 
+                id="id_task_type"
+                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            <option value="">All Types</option>
+            <option value="personal" {% if selected_task_type == 'personal' %}selected{% endif %}>Personal</option>
+            <option value="delegated" {% if selected_task_type == 'delegated' %}selected{% endif %}>Delegated</option>
+        </select>
+    </div>
+
+    {% if show_department_filter %}
+    <!-- Department Filter (Manager+ only) -->
+    <div class="mb-6">
+        <label for="id_department" class="block text-sm font-medium text-gray-700 mb-1">
+            Department
+        </label>
+        <select name="department" 
+                id="id_department"
+                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            <option value="">All Departments</option>
+            {% for dept in departments %}
+            <option value="{{ dept.pk }}" {% if selected_department == dept.pk %}selected{% endif %}>
+                {{ dept.name }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+
+    {% if show_assignee_filter %}
+    <!-- Assignee Filter (Manager+ only) -->
+    <div class="mb-6">
+        <label for="id_assignee" class="block text-sm font-medium text-gray-700 mb-1">
+            Assignee
+        </label>
+        <select name="assignee" 
+                id="id_assignee"
+                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            <option value="">All Assignees</option>
+            {% for user in assignees %}
+            <option value="{{ user.pk }}" {% if selected_assignee == user.pk %}selected{% endif %}>
+                {{ user.get_full_name }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+
+    <!-- Hidden sort field to preserve sort when filtering -->
+    <input type="hidden" name="sort" value="{{ current_sort|default:'-created_at' }}">
+
+    <!-- Apply Filters Button (for non-JS fallback) -->
+    <noscript>
+        <div class="mt-4">
+            <button type="submit" 
+                    class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
+                Apply Filters
+            </button>
+        </div>
+    </noscript>
+</form>
+
+<!-- Active Filters Summary -->
+{% if has_active_filters %}
+<div class="mt-4 pt-4 border-t border-gray-200">
+    <h3 class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Active Filters</h3>
+    <div class="flex flex-wrap gap-2">
+        {% if selected_statuses %}
+        {% for status in selected_statuses %}
+        <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-700">
+            Status: {{ status }}
+            <a href="?{% remove_filter_param 'status' status %}" 
+               class="ml-1 text-blue-500 hover:text-blue-700">
+                <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+            </a>
+        </span>
+        {% endfor %}
+        {% endif %}
+        
+        {% if selected_priorities %}
+        {% for priority in selected_priorities %}
+        <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-yellow-100 text-yellow-700">
+            Priority: {{ priority }}
+            <a href="?{% remove_filter_param 'priority' priority %}" 
+               class="ml-1 text-yellow-500 hover:text-yellow-700">
+                <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+            </a>
+        </span>
+        {% endfor %}
+        {% endif %}
+        
+        {% if selected_deadline_filter %}
+        <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-700">
+            Deadline: {{ selected_deadline_filter }}
+            <a href="?{% remove_filter_param 'deadline_filter' '' %}" 
+               class="ml-1 text-green-500 hover:text-green-700">
+                <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+            </a>
+        </span>
+        {% endif %}
+        
+        {% if filter.form.search.value %}
+        <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-700">
+            Search: "{{ filter.form.search.value }}"
+            <a href="?{% remove_filter_param 'search' '' %}" 
+               class="ml-1 text-gray-500 hover:text-gray-700">
+                <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+            </a>
+        </span>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

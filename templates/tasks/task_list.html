@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% load task_tags %}
+
+{% block title %}Tasks - Task Manager{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Tasks</h1>
+            <p class="mt-1 text-sm text-gray-500">
+                {% if total_count %}
+                    Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ total_count }} tasks
+                {% else %}
+                    No tasks found
+                {% endif %}
+            </p>
+        </div>
+        <div class="flex items-center space-x-3">
+            <a href="{% url 'tasks:dashboard' %}" 
+               class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                </svg>
+                Dashboard
+            </a>
+            <a href="{% url 'tasks:task_create' %}" 
+               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
+                <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                New Task
+            </a>
+        </div>
+    </div>
+
+    <div class="flex flex-col lg:flex-row gap-6">
+        <!-- Filter Sidebar -->
+        <aside class="w-full lg:w-72 flex-shrink-0">
+            <div class="bg-white shadow rounded-lg p-4 sticky top-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-medium text-gray-900">Filters</h2>
+                    {% if has_active_filters %}
+                    <a href="{% url 'tasks:task_list' %}" 
+                       class="text-sm text-indigo-600 hover:text-indigo-800">
+                        Clear All
+                    </a>
+                    {% endif %}
+                </div>
+                
+                {% include 'tasks/partials/filters.html' %}
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 min-w-0">
+            <!-- Sort & View Controls -->
+            <div class="bg-white shadow rounded-lg mb-4">
+                <div class="px-4 py-3 border-b border-gray-200">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <!-- Sort Dropdown -->
+                        <div class="flex items-center space-x-3">
+                            <label for="sort" class="text-sm font-medium text-gray-700">Sort by:</label>
+                            <select id="sort" 
+                                    name="sort"
+                                    class="block w-48 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    hx-get="{% url 'tasks:task_list' %}"
+                                    hx-trigger="change"
+                                    hx-target="#task-list-container"
+                                    hx-push-url="true"
+                                    hx-include="[name]">
+                                {% for value, label in sorting_options %}
+                                <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <!-- View Toggle (Placeholder for Kanban) -->
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm text-gray-500">View:</span>
+                            <button class="inline-flex items-center px-3 py-1.5 border border-indigo-500 text-sm font-medium rounded-md text-indigo-600 bg-indigo-50">
+                                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                                </svg>
+                                List
+                            </button>
+                            <button class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50" disabled title="Coming soon">
+                                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+                                </svg>
+                                Kanban
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Task List Container (HTMX target) -->
+            <div id="task-list-container">
+                {% include 'tasks/partials/task_list_content.html' %}
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- Loading Indicator -->
+<div id="loading-indicator" class="htmx-indicator fixed top-4 right-4 bg-indigo-600 text-white px-4 py-2 rounded-md shadow-lg">
+    <div class="flex items-center">
+        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Loading...
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // HTMX configuration for filters
+    document.body.addEventListener('htmx:configRequest', function(evt) {
+        // Add loading indicator
+        evt.detail.headers['HX-Indicator'] = '#loading-indicator';
+    });
+    
+    // Show/hide custom date range fields
+    document.addEventListener('DOMContentLoaded', function() {
+        const deadlineFilter = document.getElementById('id_deadline_filter');
+        const customRangeFields = document.getElementById('custom-date-range');
+        
+        if (deadlineFilter && customRangeFields) {
+            function toggleCustomRange() {
+                if (deadlineFilter.value === 'custom') {
+                    customRangeFields.classList.remove('hidden');
+                } else {
+                    customRangeFields.classList.add('hidden');
+                }
+            }
+            
+            deadlineFilter.addEventListener('change', toggleCustomRange);
+            toggleCustomRange(); // Initial state
+        }
+    });
+    
+    // Re-run after HTMX swaps
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        // Reinitialize any JavaScript if needed
+    });
+</script>
+{% endblock %}

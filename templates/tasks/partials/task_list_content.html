@@ -1,0 +1,283 @@
+{% load task_tags %}
+{# Task List Content - HTMX swappable partial #}
+
+{% if tasks %}
+<div class="bg-white shadow rounded-lg overflow-hidden">
+    <!-- Table Header -->
+    <div class="hidden sm:block">
+        <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
+            <div class="grid grid-cols-12 gap-4 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                <div class="col-span-4">Task</div>
+                <div class="col-span-2">Assignee</div>
+                <div class="col-span-2 text-center">Status</div>
+                <div class="col-span-1 text-center">Priority</div>
+                <div class="col-span-2 text-center">Deadline</div>
+                <div class="col-span-1 text-right">Actions</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Task Rows -->
+    <ul class="divide-y divide-gray-200" role="list">
+        {% for task in tasks %}
+        <li class="{{ task|task_row_class }} hover:bg-gray-50 transition-colors duration-150">
+            <a href="{% url 'tasks:task_detail' task.pk %}" class="block">
+                <div class="px-4 py-4">
+                    <!-- Mobile Layout -->
+                    <div class="sm:hidden space-y-3">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">
+                                    {{ task.title }}
+                                </p>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    {{ task.reference_number }}
+                                </p>
+                            </div>
+                            <div class="ml-2 flex-shrink-0">
+                                {% status_badge task %}
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between text-xs text-gray-500">
+                            <div class="flex items-center space-x-3">
+                                {% priority_badge task.priority %}
+                                <span>{{ task.assignee.get_full_name }}</span>
+                            </div>
+                            <div>
+                                {% if task.deadline %}
+                                    {{ task.deadline|format_deadline }}
+                                {% else %}
+                                    <span class="text-gray-400">No deadline</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Desktop Layout -->
+                    <div class="hidden sm:grid sm:grid-cols-12 sm:gap-4 sm:items-center">
+                        <!-- Task Info -->
+                        <div class="col-span-4">
+                            <div class="flex items-start space-x-3">
+                                <div class="{{ task|priority_border_class }} pl-3 min-w-0 flex-1">
+                                    <p class="text-sm font-medium text-gray-900 truncate">
+                                        {{ task.title }}
+                                    </p>
+                                    <div class="flex items-center mt-1 space-x-2">
+                                        <span class="text-xs text-gray-500">{{ task.reference_number }}</span>
+                                        {% if task.task_type == 'personal' %}
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                                            Personal
+                                        </span>
+                                        {% endif %}
+                                        {% if task|is_escalated %}
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+                                            Escalated
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Assignee -->
+                        <div class="col-span-2">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                    <span class="text-xs font-medium text-gray-600">
+                                        {{ task.assignee.first_name|slice:":1" }}{{ task.assignee.last_name|slice:":1" }}
+                                    </span>
+                                </div>
+                                <div class="ml-2 min-w-0">
+                                    <p class="text-sm text-gray-900 truncate">
+                                        {{ task.assignee.get_full_name }}
+                                    </p>
+                                    {% if task.assignee.department %}
+                                    <p class="text-xs text-gray-500 truncate">
+                                        {{ task.assignee.department.name }}
+                                    </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Status -->
+                        <div class="col-span-2 text-center">
+                            {% status_badge task %}
+                        </div>
+                        
+                        <!-- Priority -->
+                        <div class="col-span-1 text-center">
+                            {% priority_badge task.priority %}
+                        </div>
+                        
+                        <!-- Deadline -->
+                        <div class="col-span-2 text-center">
+                            {% if task.deadline %}
+                                <span class="text-sm {% if task|is_overdue %}text-red-600 font-medium{% else %}text-gray-900{% endif %}">
+                                    {{ task.deadline|format_deadline }}
+                                </span>
+                                {% if task|is_overdue %}
+                                <p class="text-xs text-red-500 mt-0.5">
+                                    {{ task|hours_overdue_display }} overdue
+                                </p>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-sm text-gray-400">No deadline</span>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="col-span-1 text-right">
+                            <div class="flex items-center justify-end space-x-2" onclick="event.stopPropagation();">
+                                <!-- Quick Status Change -->
+                                {% if task.status != 'cancelled' and task.status != 'verified' %}
+                                {% with next_status=task.get_next_status %}
+                                {% if next_status %}
+                                <form action="{% url 'tasks:quick_status_change' task.pk %}" 
+                                      method="post"
+                                      hx-post="{% url 'tasks:quick_status_change' task.pk %}"
+                                      hx-target="#task-list-container"
+                                      hx-swap="innerHTML"
+                                      hx-include="#filter-form"
+                                      class="inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="status" value="{{ next_status }}">
+                                    <button type="submit" 
+                                            class="text-gray-400 hover:text-indigo-600 transition-colors"
+                                            title="Mark as {{ next_status|title }}">
+                                        {% if next_status == 'in_progress' %}
+                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        {% elif next_status == 'completed' %}
+                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        {% elif next_status == 'verified' %}
+                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                        </svg>
+                                        {% endif %}
+                                    </button>
+                                </form>
+                                {% endif %}
+                                {% endwith %}
+                                {% endif %}
+                                
+                                <!-- View Details -->
+                                <span class="text-gray-400 hover:text-gray-600">
+                                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<nav class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 mt-4 rounded-lg shadow" aria-label="Pagination">
+    <div class="hidden sm:block">
+        <p class="text-sm text-gray-700">
+            Showing
+            <span class="font-medium">{{ page_obj.start_index }}</span>
+            to
+            <span class="font-medium">{{ page_obj.end_index }}</span>
+            of
+            <span class="font-medium">{{ page_obj.paginator.count }}</span>
+            results
+        </p>
+    </div>
+    <div class="flex-1 flex justify-between sm:justify-end space-x-3">
+        {% if page_obj.has_previous %}
+        <a href="?{%  url_replace 'page' page_obj.previous_page_number %}"
+           hx-get="{% url 'tasks:task_list' %}?{%  url_replace 'page' page_obj.previous_page_number %}"
+           hx-target="#task-list-container"
+           hx-push-url="true"
+           class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+            Previous
+        </a>
+        {% endif %}
+        
+        <!-- Page Numbers -->
+        <div class="hidden md:flex space-x-1">
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                <span class="relative inline-flex items-center px-4 py-2 border border-indigo-500 text-sm font-medium rounded-md text-indigo-600 bg-indigo-50">
+                    {{ num }}
+                </span>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                <a href="?{%  url_replace 'page' num %}"
+                   hx-get="{% url 'tasks:task_list' %}?{%  url_replace 'page' num %}"
+                   hx-target="#task-list-container"
+                   hx-push-url="true"
+                   class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    {{ num }}
+                </a>
+                {% elif num == 1 or num == page_obj.paginator.num_pages %}
+                <a href="?{%  url_replace 'page' num %}"
+                   hx-get="{% url 'tasks:task_list' %}?{%  url_replace 'page' num %}"
+                   hx-target="#task-list-container"
+                   hx-push-url="true"
+                   class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    {{ num }}
+                </a>
+                {% elif num == page_obj.number|add:'-3' or num == page_obj.number|add:'3' %}
+                <span class="relative inline-flex items-center px-2 py-2 text-sm font-medium text-gray-500">...</span>
+                {% endif %}
+            {% endfor %}
+        </div>
+        
+        {% if page_obj.has_next %}
+        <a href="?{%  url_replace 'page' page_obj.next_page_number %}"
+           hx-get="{% url 'tasks:task_list' %}?{%  url_replace 'page' page_obj.next_page_number %}"
+           hx-target="#task-list-container"
+           hx-push-url="true"
+           class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+            Next
+        </a>
+        {% endif %}
+    </div>
+</nav>
+{% endif %}
+
+{% else %}
+<!-- Empty State -->
+<div class="bg-white shadow rounded-lg">
+    <div class="px-4 py-12 text-center">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">No tasks found</h3>
+        <p class="mt-1 text-sm text-gray-500">
+            {% if has_active_filters %}
+                Try adjusting your filters or search criteria.
+            {% else %}
+                Get started by creating a new task.
+            {% endif %}
+        </p>
+        <div class="mt-6 flex justify-center space-x-3">
+            {% if has_active_filters %}
+            <a href="{% url 'tasks:task_list' %}" 
+               class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Clear Filters
+            </a>
+            {% endif %}
+            <a href="{% url 'tasks:task_create' %}" 
+               class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                New Task
+            </a>
+        </div>
+    </div>
+</div>
+{% endif %}
