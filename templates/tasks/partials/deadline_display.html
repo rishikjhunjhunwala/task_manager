@@ -1,0 +1,68 @@
+{# templates/tasks/partials/deadline_display.html #}
+{# 
+    Deadline display component with appropriate styling.
+    
+    Used by {% deadline_display task %} inclusion tag.
+    
+    Context variables:
+    - task: The task object
+    - is_overdue: Boolean
+    - is_escalated: Boolean  
+    - formatted_deadline: Human-readable deadline string
+    - hours_overdue: Number of hours past deadline
+#}
+
+{% if task.deadline %}
+<div class="flex items-center space-x-2">
+    {# Clock/Warning icon based on status #}
+    {% if is_escalated %}
+        <svg class="h-4 w-4 text-red-900" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+        </svg>
+    {% elif is_overdue %}
+        <svg class="h-4 w-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+        </svg>
+    {% else %}
+        <svg class="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+        </svg>
+    {% endif %}
+    
+    {# Deadline text #}
+    <span class="{% if is_escalated %}text-red-900 font-semibold{% elif is_overdue %}text-red-600 font-medium{% else %}text-gray-600{% endif %}">
+        {{ formatted_deadline }}
+    </span>
+    
+    {# Overdue badge #}
+    {% if is_escalated %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-900 text-white">
+            ESCALATED
+        </span>
+    {% elif is_overdue %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+            OVERDUE
+        </span>
+    {% endif %}
+</div>
+
+{# Hours overdue tooltip/detail #}
+{% if is_overdue and hours_overdue > 0 %}
+<div class="text-xs {% if is_escalated %}text-red-800{% else %}text-red-500{% endif %} mt-0.5">
+    {% if hours_overdue < 1 %}
+        {{ hours_overdue|floatformat:0 }} minutes overdue
+    {% elif hours_overdue < 24 %}
+        {{ hours_overdue|floatformat:0 }} hours overdue
+    {% elif hours_overdue < 72 %}
+        {{ hours_overdue|floatformat:0 }} hours ({{ hours_overdue|divisibleby:24 }} days) overdue
+    {% elif hours_overdue < 120 %}
+        <span class="font-medium">Level 1 Escalation</span> — {{ hours_overdue|floatformat:0 }} hours overdue
+    {% else %}
+        <span class="font-medium">Level 2 Escalation</span> — {{ hours_overdue|floatformat:0 }} hours overdue
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<span class="text-gray-400 text-sm">No deadline</span>
+{% endif %}
