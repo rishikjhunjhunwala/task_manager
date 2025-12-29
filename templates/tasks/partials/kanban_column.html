@@ -1,0 +1,19 @@
+{% load task_tags %}
+
+{# Kanban Column Partial - for HTMX refresh #}
+{# Used to refresh a single column after a card is dropped #}
+
+<div class="kanban-column-body" 
+     id="column-{{ column.id }}"
+     data-status="{{ column.status }}"
+     ondragover="handleDragOver(event)"
+     ondragleave="handleDragLeave(event)"
+     ondrop="handleDrop(event)">
+    {% for task in column.tasks %}
+        {% include 'tasks/partials/task_card.html' with task=task %}
+    {% empty %}
+    <div class="text-center text-gray-400 text-sm py-8">
+        No tasks
+    </div>
+    {% endfor %}
+</div>

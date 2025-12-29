@@ -1,0 +1,340 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load task_tags %}
+
+{% block title %}Kanban Board - Task Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Kanban board styles */
+    .kanban-board {
+        display: flex;
+        gap: 1rem;
+        overflow-x: auto;
+        min-height: calc(100vh - 300px);
+        padding-bottom: 1rem;
+    }
+    
+    .kanban-column {
+        flex: 0 0 280px;
+        min-width: 280px;
+        max-width: 280px;
+        display: flex;
+        flex-direction: column;
+        background-color: #f3f4f6;
+        border-radius: 0.5rem;
+        max-height: calc(100vh - 280px);
+    }
+    
+    .kanban-column-header {
+        padding: 0.75rem 1rem;
+        font-weight: 600;
+        border-bottom: 2px solid;
+        border-radius: 0.5rem 0.5rem 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .kanban-column-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.5rem;
+        min-height: 100px;
+    }
+    
+    /* Drag and drop styles */
+    .task-card {
+        cursor: grab;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    
+    .task-card:active {
+        cursor: grabbing;
+    }
+    
+    .task-card.dragging {
+        opacity: 0.5;
+        transform: rotate(2deg);
+    }
+    
+    .kanban-column-body.drag-over {
+        background-color: #e0e7ff;
+        border: 2px dashed #6366f1;
+        border-radius: 0.25rem;
+    }
+    
+    .kanban-column-body.invalid-drop {
+        background-color: #fee2e2;
+        border: 2px dashed #dc2626;
+    }
+    
+    /* Column colors */
+    .column-pending .kanban-column-header {
+        background-color: #fef3c7;
+        border-color: #f59e0b;
+        color: #92400e;
+    }
+    
+    .column-in_progress .kanban-column-header {
+        background-color: #dbeafe;
+        border-color: #3b82f6;
+        color: #1e40af;
+    }
+    
+    .column-completed .kanban-column-header {
+        background-color: #d1fae5;
+        border-color: #10b981;
+        color: #065f46;
+    }
+    
+    .column-verified .kanban-column-header {
+        background-color: #a7f3d0;
+        border-color: #059669;
+        color: #064e3b;
+    }
+    
+    /* Scrollbar styling */
+    .kanban-column-body::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .kanban-column-body::-webkit-scrollbar-track {
+        background: #e5e7eb;
+        border-radius: 3px;
+    }
+    
+    .kanban-column-body::-webkit-scrollbar-thumb {
+        background: #9ca3af;
+        border-radius: 3px;
+    }
+    
+    .kanban-column-body::-webkit-scrollbar-thumb:hover {
+        background: #6b7280;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Kanban Board</h1>
+            <p class="text-sm text-gray-500 mt-1">
+                Drag and drop tasks between columns to change status
+            </p>
+        </div>
+        <a href="{% url 'tasks:task_create' %}" 
+           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            New Task
+        </a>
+    </div>
+    
+    <!-- View Toggle & Filters -->
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <!-- View Toggle -->
+            <div class="flex space-x-2">
+                <a href="{% url 'tasks:task_list' %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}"
+                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                    </svg>
+                    List
+                </a>
+                <span class="inline-flex items-center px-3 py-2 border border-indigo-500 shadow-sm text-sm font-medium rounded-md text-indigo-700 bg-indigo-50">
+                    <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+                    </svg>
+                    Kanban
+                </span>
+            </div>
+            
+            <!-- Task Count -->
+            <div class="text-sm text-gray-500">
+                <span class="font-medium">{{ total_tasks }}</span> tasks total
+            </div>
+        </div>
+        
+        <!-- Filters (collapsed by default on Kanban) -->
+        <details class="mt-4">
+            <summary class="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 flex items-center">
+                <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                </svg>
+                Filters
+                {% if request.GET %}
+                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                    Active
+                </span>
+                {% endif %}
+            </summary>
+            <div class="mt-4 pt-4 border-t">
+                <form method="get" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <!-- Search -->
+                    <div>
+                        <label for="search" class="block text-xs font-medium text-gray-500">Search</label>
+                        <input type="text" name="search" id="search" 
+                               value="{{ request.GET.search }}"
+                               placeholder="Title, description..."
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                    </div>
+                    
+                    <!-- Priority -->
+                    <div>
+                        <label for="priority" class="block text-xs font-medium text-gray-500">Priority</label>
+                        <select name="priority" id="priority" 
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="">All Priorities</option>
+                            <option value="low" {% if request.GET.priority == 'low' %}selected{% endif %}>Low</option>
+                            <option value="medium" {% if request.GET.priority == 'medium' %}selected{% endif %}>Medium</option>
+                            <option value="high" {% if request.GET.priority == 'high' %}selected{% endif %}>High</option>
+                            <option value="critical" {% if request.GET.priority == 'critical' %}selected{% endif %}>Critical</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Deadline -->
+                    <div>
+                        <label for="deadline" class="block text-xs font-medium text-gray-500">Deadline</label>
+                        <select name="deadline" id="deadline"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="">Any Deadline</option>
+                            <option value="today" {% if request.GET.deadline == 'today' %}selected{% endif %}>Today</option>
+                            <option value="this_week" {% if request.GET.deadline == 'this_week' %}selected{% endif %}>This Week</option>
+                            <option value="overdue" {% if request.GET.deadline == 'overdue' %}selected{% endif %}>Overdue</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Task Type -->
+                    <div>
+                        <label for="task_type" class="block text-xs font-medium text-gray-500">Task Type</label>
+                        <select name="task_type" id="task_type"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                            <option value="">All Types</option>
+                            <option value="personal" {% if request.GET.task_type == 'personal' %}selected{% endif %}>Personal</option>
+                            <option value="delegated" {% if request.GET.task_type == 'delegated' %}selected{% endif %}>Delegated</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Filter Actions -->
+                    <div class="col-span-2 md:col-span-4 flex gap-2">
+                        <button type="submit"
+                                class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Apply Filters
+                        </button>
+                        <a href="{% url 'tasks:kanban' %}"
+                           class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Clear
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </details>
+    </div>
+    
+    <!-- Kanban Board -->
+    <div class="kanban-board" id="kanban-board">
+        {% for column in columns %}
+        <div class="kanban-column column-{{ column.id }}" 
+             data-status="{{ column.status }}"
+             data-column-id="{{ column.id }}">
+            <div class="kanban-column-header">
+                <span>{{ column.title }}</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white bg-opacity-50">
+                    {{ column.count }}
+                </span>
+            </div>
+            <div class="kanban-column-body" 
+                 id="column-{{ column.id }}"
+                 data-status="{{ column.status }}"
+                 ondragover="handleDragOver(event)"
+                 ondragleave="handleDragLeave(event)"
+                 ondrop="handleDrop(event)">
+                {% for task in column.tasks %}
+                    {% include 'tasks/partials/task_card.html' with task=task %}
+                {% empty %}
+                <div class="text-center text-gray-400 text-sm py-8">
+                    No tasks
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Error Toast (hidden by default) -->
+    <div id="error-toast" 
+         class="fixed bottom-4 right-4 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg hidden z-50 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span id="error-message">Error message</span>
+        <button onclick="hideErrorToast()" class="ml-2 hover:text-gray-200">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    </div>
+    
+    <!-- Success Toast (hidden by default) -->
+    <div id="success-toast"
+         class="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg hidden z-50 flex items-center space-x-2">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        <span id="success-message">Task moved successfully</span>
+    </div>
+</div>
+
+<!-- Kanban Legend -->
+<div class="mt-4 bg-white rounded-lg shadow p-4">
+    <h3 class="text-sm font-medium text-gray-700 mb-2">Legend</h3>
+    <div class="flex flex-wrap gap-4 text-xs">
+        <div class="flex items-center">
+            <span class="w-3 h-3 rounded bg-red-200 border border-red-400 mr-1"></span>
+            <span class="text-gray-600">Overdue</span>
+        </div>
+        <div class="flex items-center">
+            <span class="w-3 h-3 rounded bg-red-900 mr-1"></span>
+            <span class="text-gray-600">Escalated (72h+)</span>
+        </div>
+        <div class="flex items-center">
+            <span class="w-3 h-3 rounded-full bg-red-500 mr-1"></span>
+            <span class="text-gray-600">Critical</span>
+        </div>
+        <div class="flex items-center">
+            <span class="w-3 h-3 rounded-full bg-orange-500 mr-1"></span>
+            <span class="text-gray-600">High</span>
+        </div>
+        <div class="flex items-center">
+            <span class="w-3 h-3 rounded-full bg-blue-500 mr-1"></span>
+            <span class="text-gray-600">Medium</span>
+        </div>
+        <div class="flex items-center">
+            <span class="w-3 h-3 rounded-full bg-gray-400 mr-1"></span>
+            <span class="text-gray-600">Low</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/kanban.js' %}"></script>
+<script>
+    // Pass CSRF token to JavaScript
+    window.CSRF_TOKEN = '{{ csrf_token }}';
+    
+    // Define valid transitions for client-side validation
+    window.VALID_TRANSITIONS = {
+        'pending': ['in_progress'],
+        'in_progress': ['completed'],
+        'completed': ['verified'],
+        'verified': [],
+        'cancelled': []
+    };
+</script>
+{% endblock %}

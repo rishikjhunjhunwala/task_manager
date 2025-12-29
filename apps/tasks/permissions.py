@@ -16,6 +16,94 @@ from .models import Task
 # View Permissions
 # =============================================================================
 
+def get_allowed_status_transitions(task, user):
+    """
+    Get list of status values this task can transition to.
+    
+    Used by Kanban drag-and-drop to determine valid drop targets.
+    """
+    from .models import Task
+    
+    allowed = []
+    
+    # Check if user can change this task's status at all
+    if not can_change_task_status(user, task):
+        return allowed
+    
+    # Get current status
+    current_status = task.status
+    
+    # Terminal states - no transitions allowed
+    if current_status in [Task.Status.CANCELLED, Task.Status.VERIFIED]:
+        return allowed
+    
+    # Personal completed tasks are terminal
+    if task.is_personal and current_status == Task.Status.COMPLETED:
+        return allowed
+    
+    # Define valid forward transitions
+    transitions = {
+        Task.Status.PENDING: [Task.Status.IN_PROGRESS],
+        Task.Status.IN_PROGRESS: [Task.Status.COMPLETED],
+        Task.Status.COMPLETED: [Task.Status.VERIFIED] if task.is_delegated else [],
+    }
+    
+    # Get allowed transitions for current status
+    allowed = transitions.get(current_status, [])
+    
+    # For verification, only creator/admin can verify
+    if Task.Status.VERIFIED in allowed:
+        if not (user == task.created_by or user.is_admin()):
+            allowed.remove(Task.Status.VERIFIED)
+    
+    return allowed
+
+
+def can_change_task_status(user, task):
+    """
+    Check if user can change the status of a task.
+    """
+    # Admin can change anything
+    if user.is_admin():
+        return True
+    
+    # Assignee can progress their own tasks
+    if user == task.assignee:
+        return True
+    
+    # Creator can verify delegated tasks
+    if user == task.created_by and task.is_delegated:
+        return True
+    
+    return False
+
+
+def get_visible_tasks(user):
+    """
+    Get queryset of tasks visible to this user based on their role.
+    """
+    from .models import Task
+    
+    base_qs = Task.objects.all()
+    
+    # Admin and Senior Managers see everything
+    if user.can_view_all_tasks():
+        return base_qs
+    
+    # Manager sees department tasks
+    if user.can_view_department_tasks() and user.department:
+        return base_qs.filter(
+            Q(department=user.department) |
+            Q(assignee=user) |
+            Q(created_by=user)
+        ).distinct()
+    
+    # Employee sees only their own tasks
+    return base_qs.filter(
+        Q(assignee=user) | Q(created_by=user)
+    ).distinct()
+
+
 def can_view_task(user, task):
     """
     Check if user can view a specific task.

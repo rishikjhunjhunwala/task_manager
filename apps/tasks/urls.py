@@ -46,4 +46,9 @@ urlpatterns = [
     # HTMX Partials
     path('partials/task/<int:pk>/', views.partials_task_row, name='partials_task_row'),
     path('partials/counts/', views.partials_badge_counts, name='partials_badge_counts'),
+
+    # Kanban Views
+    path('kanban/', views.kanban, name='kanban'),
+    path('kanban/move/<int:pk>/', views.kanban_move, name='kanban_move'),
+    path('kanban/column/<str:status>/', views.kanban_column, name='kanban_column'),
 ]

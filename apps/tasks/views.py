@@ -26,8 +26,8 @@ from .services import (
     remove_attachment
 )
 from .permissions import (
-    can_view_task, can_edit_task, can_change_status,
-    can_cancel_task, can_reassign_task, get_viewable_tasks
+    can_view_task, can_edit_task, can_change_status, can_change_task_status,
+    can_cancel_task, can_reassign_task, get_viewable_tasks, get_allowed_status_transitions, get_visible_tasks
 )
 from .filters import TaskFilter, DashboardTaskFilter, get_sorting_options, apply_sorting
 from apps.departments.models import Department
@@ -671,3 +671,219 @@ def partials_badge_counts(request):
         'pending_count': pending_count,
         'overdue_count': overdue_count,
     })
+
+
+@login_required
+def kanban(request):
+    """
+    Kanban board view with drag-and-drop status changes.
+    """
+    from .models import Task
+    from .filters import TaskFilter
+    
+    user = request.user
+    
+    # Get base queryset based on role
+    base_queryset = get_visible_tasks(user)
+    
+    # Exclude cancelled tasks from Kanban
+    base_queryset = base_queryset.exclude(status=Task.Status.CANCELLED)
+    
+    # Apply filters (except status)
+    filter_params = request.GET.copy()
+    filter_params.pop('status', None)
+    
+    task_filter = TaskFilter(filter_params, queryset=base_queryset, request=request)
+    filtered_queryset = task_filter.qs
+    
+    # Group tasks by status (max 50 per column)
+    pending_tasks = filtered_queryset.filter(
+        status=Task.Status.PENDING
+    ).select_related('assignee', 'created_by', 'department')[:50]
+    
+    in_progress_tasks = filtered_queryset.filter(
+        status=Task.Status.IN_PROGRESS
+    ).select_related('assignee', 'created_by', 'department')[:50]
+    
+    completed_tasks = filtered_queryset.filter(
+        status=Task.Status.COMPLETED
+    ).select_related('assignee', 'created_by', 'department')[:50]
+    
+    verified_tasks = filtered_queryset.filter(
+        status=Task.Status.VERIFIED
+    ).select_related('assignee', 'created_by', 'department')[:50]
+    
+    # Count totals
+    pending_count = filtered_queryset.filter(status=Task.Status.PENDING).count()
+    in_progress_count = filtered_queryset.filter(status=Task.Status.IN_PROGRESS).count()
+    completed_count = filtered_queryset.filter(status=Task.Status.COMPLETED).count()
+    verified_count = filtered_queryset.filter(status=Task.Status.VERIFIED).count()
+    
+    columns = [
+        {
+            'id': 'pending',
+            'status': Task.Status.PENDING,
+            'title': 'Pending',
+            'tasks': pending_tasks,
+            'count': pending_count,
+            'color': 'yellow',
+        },
+        {
+            'id': 'in_progress',
+            'status': Task.Status.IN_PROGRESS,
+            'title': 'In Progress',
+            'tasks': in_progress_tasks,
+            'count': in_progress_count,
+            'color': 'blue',
+        },
+        {
+            'id': 'completed',
+            'status': Task.Status.COMPLETED,
+            'title': 'Completed',
+            'tasks': completed_tasks,
+            'count': completed_count,
+            'color': 'green',
+        },
+        {
+            'id': 'verified',
+            'status': Task.Status.VERIFIED,
+            'title': 'Verified',
+            'tasks': verified_tasks,
+            'count': verified_count,
+            'color': 'emerald',
+        },
+    ]
+    
+    context = {
+        'columns': columns,
+        'filter': task_filter,
+        'view_mode': 'kanban',
+        'total_tasks': pending_count + in_progress_count + completed_count + verified_count,
+    }
+    
+    return render(request, 'tasks/kanban.html', context)
+
+
+@login_required
+@require_POST
+def kanban_move(request, pk):
+    """
+    HTMX endpoint to update task status via drag-and-drop.
+    """
+    from .models import Task
+    
+    user = request.user
+    new_status = request.POST.get('new_status')
+    
+    # Validate new_status
+    valid_statuses = [choice[0] for choice in Task.Status.choices]
+    if not new_status or new_status not in valid_statuses:
+        return HttpResponse(
+            '<div class="text-red-600 text-sm p-2">Invalid status</div>',
+            status=400
+        )
+    
+    # Get the task
+    try:
+        task = Task.objects.select_related(
+            'assignee', 'created_by', 'department'
+        ).get(pk=pk)
+    except Task.DoesNotExist:
+        return HttpResponse(
+            '<div class="text-red-600 text-sm p-2">Task not found</div>',
+            status=404
+        )
+    
+    # Check permissions
+    if not can_change_task_status(user, task):
+        return HttpResponse(
+            '<div class="text-red-600 text-sm p-2">Permission denied</div>',
+            status=403
+        )
+    
+    # Check if transition is valid
+    allowed_transitions = get_allowed_status_transitions(task, user)
+    if new_status not in allowed_transitions:
+        error_msg = f"Cannot move from {task.get_status_display()} to {dict(Task.Status.choices).get(new_status)}"
+        return HttpResponse(
+            f'<div class="text-red-600 text-sm p-2">{error_msg}</div>',
+            status=400
+        )
+    
+    # Check for personal completed tasks
+    if task.is_personal and task.status == Task.Status.COMPLETED:
+        return HttpResponse(
+            '<div class="text-red-600 text-sm p-2">Personal completed tasks cannot be moved</div>',
+            status=400
+        )
+    
+    # Perform the status change
+    try:
+        task = change_status(task, user, new_status)
+    except PermissionError as e:
+        return HttpResponse(
+            f'<div class="text-red-600 text-sm p-2">{str(e)}</div>',
+            status=403
+        )
+    except ValueError as e:
+        return HttpResponse(
+            f'<div class="text-red-600 text-sm p-2">{str(e)}</div>',
+            status=400
+        )
+    
+    # Return updated task card
+    return render(request, 'tasks/partials/task_card.html', {'task': task, 'user': user})
+
+
+@login_required
+def kanban_column(request, status):
+    """
+    HTMX endpoint to refresh a single Kanban column.
+    """
+    from .models import Task
+    from .filters import TaskFilter
+    
+    user = request.user
+    
+    valid_statuses = {
+        'pending': Task.Status.PENDING,
+        'in_progress': Task.Status.IN_PROGRESS,
+        'completed': Task.Status.COMPLETED,
+        'verified': Task.Status.VERIFIED,
+    }
+    
+    if status not in valid_statuses:
+        return HttpResponse('Invalid status', status=400)
+    
+    task_status = valid_statuses[status]
+    
+    base_queryset = get_visible_tasks(user)
+    filter_params = request.GET.copy()
+    filter_params.pop('status', None)
+    
+    task_filter = TaskFilter(filter_params, queryset=base_queryset, request=request)
+    filtered_queryset = task_filter.qs
+    
+    tasks = filtered_queryset.filter(
+        status=task_status
+    ).select_related('assignee', 'created_by', 'department')[:50]
+    
+    count = filtered_queryset.filter(status=task_status).count()
+    
+    colors = {
+        'pending': 'yellow',
+        'in_progress': 'blue',
+        'completed': 'green',
+        'verified': 'emerald',
+    }
+    
+    column = {
+        'id': status,
+        'status': task_status,
+        'title': dict(Task.Status.choices).get(task_status),
+        'tasks': tasks,
+        'count': count,
+        'color': colors.get(status, 'gray'),
+    }
+    
+    return render(request, 'tasks/partials/kanban_column.html', {'column': column})
