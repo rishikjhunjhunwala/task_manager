@@ -89,3 +89,87 @@ def task_counts(request):
     context['can_view_activity_log'] = role == 'admin'
     
     return context
+
+"""
+Phase 6D: Updated Context Processors
+Replace or update your apps/tasks/context_processors.py with this version.
+
+Adds:
+- overdue_task_count: For management overview navigation badge (SM+ only)
+"""
+
+from django.utils import timezone
+
+
+def task_counts(request):
+    """
+    Add task counts to template context for navigation badges.
+    
+    Returns:
+        - pending_task_count: Pending tasks assigned to current user
+        - overdue_task_count: Overdue tasks count (SM+ only, for overview badge)
+    """
+    context = {
+        'pending_task_count': 0,
+        'overdue_task_count': 0,
+    }
+    
+    if not request.user.is_authenticated:
+        return context
+    
+    from apps.tasks.models import Task
+    
+    user = request.user
+    now = timezone.now()
+    
+    # Count pending tasks assigned to user
+    context['pending_task_count'] = Task.objects.filter(
+        assignee=user,
+        status__in=['pending', 'in_progress']
+    ).count()
+    
+    # Overdue count for Senior Managers and Admin only
+    if user.role in ['admin', 'senior_manager_1', 'senior_manager_2']:
+        context['overdue_task_count'] = Task.objects.filter(
+            deadline__lt=now,
+            status__in=['pending', 'in_progress']
+        ).count()
+    
+    return context
+
+
+def user_permissions(request):
+    """
+    Add user permission flags to template context for navigation visibility.
+    
+    Returns permission flags based on user role.
+    """
+    context = {
+        'can_view_department_tasks': False,
+        'can_view_management_overview': False,
+        'can_view_reports': False,
+        'can_view_activity_log': False,
+        'can_manage_users': False,
+    }
+    
+    if not request.user.is_authenticated:
+        return context
+    
+    user = request.user
+    role = user.role
+    
+    # Manager+ can view department tasks
+    if role in ['admin', 'senior_manager_1', 'senior_manager_2', 'manager']:
+        context['can_view_department_tasks'] = True
+        context['can_view_reports'] = True
+    
+    # Senior Manager+ can view management overview
+    if role in ['admin', 'senior_manager_1', 'senior_manager_2']:
+        context['can_view_management_overview'] = True
+    
+    # Admin only
+    if role == 'admin':
+        context['can_view_activity_log'] = True
+        context['can_manage_users'] = True
+    
+    return context

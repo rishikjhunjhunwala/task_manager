@@ -440,3 +440,37 @@ def task_count_badge(count, css_class=''):
         css_class,
         count
     )
+
+# ============================================================================
+# Phase 6D Additions
+# ============================================================================
+
+@register.filter
+def hours_overdue_display(task):
+    """
+    Return a human-readable string for how long a task is overdue.
+    
+    Examples:
+        "2 hours" if < 24 hours
+        "3 days" if >= 24 hours
+    """
+    if not hasattr(task, 'hours_overdue'):
+        return ""
+    
+    hours = task.hours_overdue
+    if hours <= 0:
+        return ""
+    
+    if hours < 24:
+        return f"{int(hours)} hour{'s' if hours != 1 else ''}"
+    else:
+        days = int(hours / 24)
+        return f"{days} day{'s' if days != 1 else ''}"
+
+
+@register.inclusion_tag('tasks/partials/task_type_badge.html')
+def task_type_badge(task):
+    """
+    Render a badge showing whether task is personal or delegated.
+    """
+    return {'task': task}

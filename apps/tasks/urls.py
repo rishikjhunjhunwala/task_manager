@@ -51,4 +51,8 @@ urlpatterns = [
     path('kanban/', views.kanban, name='kanban'),
     path('kanban/move/<int:pk>/', views.kanban_move, name='kanban_move'),
     path('kanban/column/<str:status>/', views.kanban_column, name='kanban_column'),
+
+    # Phase 6D: Department Tasks & Management Overview
+path('department/', views.department_tasks, name='department_tasks'),
+path('overview/', views.management_overview, name='management_overview'),
 ]

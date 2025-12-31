@@ -1,0 +1,9 @@
+{% if task.task_type == 'personal' %}
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+    Personal
+</span>
+{% else %}
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+    Delegated
+</span>
+{% endif %}

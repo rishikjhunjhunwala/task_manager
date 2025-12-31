@@ -15,7 +15,7 @@ from django.contrib import messages
 from django.http import HttpResponse, HttpResponseForbidden, FileResponse
 from django.views.decorators.http import require_http_methods, require_POST
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Case, When, IntegerField
 from django.utils import timezone
 
 from .models import Task, Comment, Attachment
@@ -887,3 +887,315 @@ def kanban_column(request, status):
     }
     
     return render(request, 'tasks/partials/kanban_column.html', {'column': column})
+
+"""
+Phase 6D: Department Tasks & Management Overview Views
+Add these functions to apps/tasks/views.py
+
+INSTRUCTIONS:
+1. Add the imports at the top of your views.py (merge with existing imports)
+2. Add both view functions at the end of your views.py file
+"""
+
+
+# ============================================================================
+# NEW VIEW FUNCTIONS - Add these to apps/tasks/views.py
+# ============================================================================
+
+
+@login_required
+def department_tasks(request):
+    """
+    Department-scoped task list view.
+    
+    Permissions:
+    - Employee: Redirected to dashboard (no access)
+    - Manager: Sees only their department's tasks
+    - Senior Manager/Admin: Sees all tasks with department filter
+    """
+    user = request.user
+    
+    # Employee cannot access this view
+    if user.is_employee():
+        messages.warning(request, "You don't have permission to view department tasks.")
+        return redirect('tasks:dashboard')
+    
+    # Base queryset with optimizations
+    queryset = Task.objects.select_related(
+        'assignee', 'created_by', 'department'
+    ).prefetch_related('comments')
+    
+    # Determine scope based on role
+    if user.is_manager():
+        # Manager sees only their department
+        if not user.department:
+            messages.error(request, "You are not assigned to any department.")
+            return redirect('tasks:dashboard')
+        
+        queryset = queryset.filter(department=user.department)
+        departments = None  # No department filter for managers
+        current_department = user.department
+        can_filter_department = False
+    else:
+        # Senior Manager/Admin sees all with optional department filter
+        from apps.departments.models import Department
+        departments = Department.objects.all().order_by('name')
+        can_filter_department = True
+        
+        # Apply department filter if selected
+        department_id = request.GET.get('department')
+        if department_id:
+            try:
+                current_department = Department.objects.get(pk=department_id)
+                queryset = queryset.filter(department=current_department)
+            except Department.DoesNotExist:
+                current_department = None
+        else:
+            current_department = None
+    
+    # Apply filters using TaskFilter
+    from .filters import TaskFilter
+    task_filter = TaskFilter(request.GET, queryset=queryset, request=request)
+    filtered_queryset = task_filter.qs
+    
+    # Apply sorting
+    sort = request.GET.get('sort', '-created_at')
+    valid_sorts = [
+        'deadline', '-deadline', 'created_at', '-created_at',
+        'priority', '-priority', 'status', '-status', 'title', '-title'
+    ]
+    if sort in valid_sorts:
+        # Handle priority sorting (custom order)
+        if sort == 'priority':
+            filtered_queryset = filtered_queryset.annotate(
+                priority_order=Case(
+                    When(priority='critical', then=0),
+                    When(priority='high', then=1),
+                    When(priority='medium', then=2),
+                    When(priority='low', then=3),
+                    output_field=IntegerField(),
+                )
+            ).order_by('priority_order')
+        elif sort == '-priority':
+            filtered_queryset = filtered_queryset.annotate(
+                priority_order=Case(
+                    When(priority='critical', then=0),
+                    When(priority='high', then=1),
+                    When(priority='medium', then=2),
+                    When(priority='low', then=3),
+                    output_field=IntegerField(),
+                )
+            ).order_by('-priority_order')
+        else:
+            filtered_queryset = filtered_queryset.order_by(sort)
+    else:
+        filtered_queryset = filtered_queryset.order_by('-created_at')
+    
+    # Pagination
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    paginator = Paginator(filtered_queryset, 20)
+    page = request.GET.get('page', 1)
+    
+    try:
+        tasks = paginator.page(page)
+    except PageNotAnInteger:
+        tasks = paginator.page(1)
+    except EmptyPage:
+        tasks = paginator.page(paginator.num_pages)
+    
+    # Calculate summary stats for current view
+    stats = {
+        'total': filtered_queryset.count(),
+        'pending': filtered_queryset.filter(status='pending').count(),
+        'in_progress': filtered_queryset.filter(status='in_progress').count(),
+        'completed': filtered_queryset.filter(status='completed').count(),
+        'overdue': filtered_queryset.filter(
+            deadline__lt=timezone.now(),
+            status__in=['pending', 'in_progress']
+        ).count(),
+    }
+    
+    # Get department head info if viewing a specific department
+    department_head = None
+    if current_department and current_department.head:
+        department_head = current_department.head
+    
+    context = {
+        'tasks': tasks,
+        'filter': task_filter,
+        'current_sort': sort,
+        'departments': departments,
+        'current_department': current_department,
+        'can_filter_department': can_filter_department,
+        'department_head': department_head,
+        'stats': stats,
+        'page_title': f'{current_department.name} Tasks' if current_department else 'All Department Tasks',
+    }
+    
+    # Handle HTMX requests
+    if request.htmx:
+        return render(request, 'tasks/partials/department_tasks_content.html', context)
+    
+    return render(request, 'tasks/department_tasks.html', context)
+
+
+@login_required
+def management_overview(request):
+    """
+    Management overview with aggregated statistics.
+    
+    Permissions:
+    - Employee/Manager: Returns 403 Forbidden
+    - Senior Manager/Admin: Full access
+    
+    Shows:
+    - Summary cards (Pending, In Progress, Completed, Overdue)
+    - Breakdown by department
+    - Breakdown by user
+    """
+    user = request.user
+    
+    # Only Senior Managers and Admin can access
+    if not (user.is_senior_manager() or user.is_admin()):
+        return HttpResponseForbidden(
+            render(request, 'tasks/403_forbidden.html', {
+                'message': 'Management overview is only accessible to Senior Managers and Administrators.'
+            }).content
+        )
+    
+    from apps.departments.models import Department
+    from apps.accounts.models import User
+    
+    # Get all active tasks (not cancelled or verified)
+    all_tasks = Task.objects.filter(
+        status__in=['pending', 'in_progress', 'completed']
+    ).select_related('assignee', 'department')
+    
+    now = timezone.now()
+    
+    # =========================================================================
+    # SUMMARY STATISTICS
+    # =========================================================================
+    summary_stats = {
+        'total_active': all_tasks.count(),
+        'pending': all_tasks.filter(status='pending').count(),
+        'in_progress': all_tasks.filter(status='in_progress').count(),
+        'completed': all_tasks.filter(status='completed').count(),
+        'overdue': all_tasks.filter(
+            deadline__lt=now,
+            status__in=['pending', 'in_progress']
+        ).count(),
+        'escalated_72h': all_tasks.filter(
+            escalated_to_sm2_at__isnull=False,
+            status__in=['pending', 'in_progress']
+        ).count(),
+        'escalated_120h': all_tasks.filter(
+            escalated_to_sm1_at__isnull=False,
+            status__in=['pending', 'in_progress']
+        ).count(),
+    }
+    
+    # =========================================================================
+    # DEPARTMENT BREAKDOWN
+    # =========================================================================
+    departments = Department.objects.annotate(
+        total_tasks=Count(
+            'tasks',
+            filter=Q(tasks__status__in=['pending', 'in_progress', 'completed'])
+        ),
+        pending_count=Count(
+            'tasks',
+            filter=Q(tasks__status='pending')
+        ),
+        in_progress_count=Count(
+            'tasks',
+            filter=Q(tasks__status='in_progress')
+        ),
+        completed_count=Count(
+            'tasks',
+            filter=Q(tasks__status='completed')
+        ),
+        overdue_count=Count(
+            'tasks',
+            filter=Q(
+                tasks__deadline__lt=now,
+                tasks__status__in=['pending', 'in_progress']
+            )
+        ),
+    ).order_by('name')
+    
+    # =========================================================================
+    # USER BREAKDOWN (Active users with tasks)
+    # =========================================================================
+    users_with_tasks = User.objects.filter(
+        is_active=True
+    ).annotate(
+        total_assigned=Count(
+            'assigned_tasks',
+            filter=Q(assigned_tasks__status__in=['pending', 'in_progress', 'completed'])
+        ),
+        pending_count=Count(
+            'assigned_tasks',
+            filter=Q(assigned_tasks__status='pending')
+        ),
+        in_progress_count=Count(
+            'assigned_tasks',
+            filter=Q(assigned_tasks__status='in_progress')
+        ),
+        completed_count=Count(
+            'assigned_tasks',
+            filter=Q(assigned_tasks__status='completed')
+        ),
+        overdue_count=Count(
+            'assigned_tasks',
+            filter=Q(
+                assigned_tasks__deadline__lt=now,
+                assigned_tasks__status__in=['pending', 'in_progress']
+            )
+        ),
+    ).filter(
+        total_assigned__gt=0  # Only users with tasks
+    ).select_related('department').order_by('department__name', 'first_name', 'last_name')
+    
+    # Pagination for user breakdown
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    paginator = Paginator(users_with_tasks, 25)
+    page = request.GET.get('page', 1)
+    
+    try:
+        users_page = paginator.page(page)
+    except PageNotAnInteger:
+        users_page = paginator.page(1)
+    except EmptyPage:
+        users_page = paginator.page(paginator.num_pages)
+    
+    # =========================================================================
+    # OVERDUE TASKS LIST (Top 10)
+    # =========================================================================
+    overdue_tasks = Task.objects.filter(
+        deadline__lt=now,
+        status__in=['pending', 'in_progress']
+    ).select_related(
+        'assignee', 'created_by', 'department'
+    ).order_by('deadline')[:10]
+    
+    # =========================================================================
+    # ESCALATED TASKS LIST (Top 10)
+    # =========================================================================
+    escalated_tasks = Task.objects.filter(
+        Q(escalated_to_sm2_at__isnull=False) | Q(escalated_to_sm1_at__isnull=False),
+        status__in=['pending', 'in_progress']
+    ).select_related(
+        'assignee', 'created_by', 'department'
+    ).order_by('deadline')[:10]
+    
+    context = {
+        'summary_stats': summary_stats,
+        'departments': departments,
+        'users_page': users_page,
+        'overdue_tasks': overdue_tasks,
+        'escalated_tasks': escalated_tasks,
+        'page_title': 'Management Overview',
+    }
+    
+    return render(request, 'tasks/management_overview.html', context)
