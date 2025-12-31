@@ -1,101 +1,334 @@
 {% extends 'base.html' %}
+{% load task_tags %}
 
 {% block title %}Dashboard - Task Manager{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% load static %}{% static 'css/task_colors.css' %}">
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
     <!-- Header -->
     <div class="flex justify-between items-center">
-        <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <a href="{% url 'tasks:task_create' %}" 
-           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-            <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            New Task
-        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+            <p class="mt-1 text-sm text-gray-500">
+                Welcome back, {{ request.user.first_name|default:request.user.email }}
+            </p>
+        </div>
+        <div class="flex items-center space-x-4">
+            <!-- View Toggle -->
+            <div class="flex rounded-md shadow-sm">
+                <a href="{% url 'tasks:dashboard' %}?{% if tab %}tab={{ tab }}&{% endif %}view=list{% if status_filter %}&status={{ status_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}{% if search %}&search={{ search }}{% endif %}" 
+                   class="px-3 py-2 text-sm font-medium {% if view_mode != 'kanban' %}bg-indigo-600 text-white{% else %}bg-white text-gray-700 hover:bg-gray-50{% endif %} rounded-l-md border border-gray-300"
+                   title="List View">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                    </svg>
+                </a>
+                <a href="{% url 'tasks:kanban' %}" 
+                   class="px-3 py-2 text-sm font-medium {% if view_mode == 'kanban' %}bg-indigo-600 text-white{% else %}bg-white text-gray-700 hover:bg-gray-50{% endif %} rounded-r-md border border-gray-300 border-l-0"
+                   title="Kanban View">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+                    </svg>
+                </a>
+            </div>
+            
+            <!-- New Task Button -->
+            <a href="{% url 'tasks:task_create' %}" 
+               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+                <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                New Task
+            </a>
+        </div>
     </div>
 
-    <!-- Dashboard tabs -->
+    <!-- Dashboard Tabs with HTMX Polling Badge Counts -->
     <div class="border-b border-gray-200">
-        <nav class="-mb-px flex space-x-8">
+        <nav class="-mb-px flex space-x-8" id="dashboard-tabs">
+            <!-- My Personal Tasks Tab -->
             <a href="?tab=my_personal{% if status_filter %}&status={{ status_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}{% if search %}&search={{ search }}{% endif %}" 
-               class="{% if tab == 'my_personal' %}border-indigo-500 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+               class="{% if tab == 'my_personal' %}border-indigo-500 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
                 My Personal Tasks
-                <span class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium {% if tab == 'my_personal' %}bg-indigo-100 text-indigo-600{% else %}bg-gray-100 text-gray-600{% endif %}">
-                    {{ counts.my_personal }}
+                <span id="badge-my-personal" 
+                      class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium {% if tab == 'my_personal' %}bg-indigo-100 text-indigo-600{% else %}bg-gray-100 text-gray-600{% endif %}"
+                      hx-get="{% url 'tasks:badge_counts' %}?type=my_personal"
+                      hx-trigger="every 60s"
+                      hx-swap="innerHTML">
+                    {{ counts.my_personal|default:0 }}
                 </span>
             </a>
+            
+            <!-- Assigned to Me Tab -->
             <a href="?tab=assigned_to_me{% if status_filter %}&status={{ status_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}{% if search %}&search={{ search }}{% endif %}" 
-               class="{% if tab == 'assigned_to_me' %}border-indigo-500 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+               class="{% if tab == 'assigned_to_me' %}border-indigo-500 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
                 Assigned to Me
-                <span class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium {% if tab == 'assigned_to_me' %}bg-indigo-100 text-indigo-600{% else %}bg-gray-100 text-gray-600{% endif %}">
-                    {{ counts.assigned_to_me }}
+                <span id="badge-assigned-to-me" 
+                      class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium {% if tab == 'assigned_to_me' %}bg-indigo-100 text-indigo-600{% else %}bg-gray-100 text-gray-600{% endif %}"
+                      hx-get="{% url 'tasks:badge_counts' %}?type=assigned_to_me"
+                      hx-trigger="every 60s"
+                      hx-swap="innerHTML">
+                    {{ counts.assigned_to_me|default:0 }}
                 </span>
+                {% if counts.overdue_assigned > 0 %}
+                <span class="ml-1 py-0.5 px-2 rounded-full text-xs font-medium bg-red-100 text-red-600"
+                      hx-get="{% url 'tasks:badge_counts' %}?type=overdue_assigned"
+                      hx-trigger="every 60s"
+                      hx-swap="innerHTML">
+                    {{ counts.overdue_assigned }} overdue
+                </span>
+                {% endif %}
             </a>
+            
+            <!-- I Assigned Tab -->
             <a href="?tab=i_assigned{% if status_filter %}&status={{ status_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}{% if search %}&search={{ search }}{% endif %}" 
-               class="{% if tab == 'i_assigned' %}border-indigo-500 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+               class="{% if tab == 'i_assigned' %}border-indigo-500 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
                 I Assigned
-                <span class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium {% if tab == 'i_assigned' %}bg-indigo-100 text-indigo-600{% else %}bg-gray-100 text-gray-600{% endif %}">
-                    {{ counts.i_assigned }}
+                <span id="badge-i-assigned" 
+                      class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium {% if tab == 'i_assigned' %}bg-indigo-100 text-indigo-600{% else %}bg-gray-100 text-gray-600{% endif %}"
+                      hx-get="{% url 'tasks:badge_counts' %}?type=i_assigned"
+                      hx-trigger="every 60s"
+                      hx-swap="innerHTML">
+                    {{ counts.i_assigned|default:0 }}
                 </span>
             </a>
         </nav>
     </div>
 
-    <!-- Filters and Search -->
-    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <!-- Search -->
-        <div class="flex-1 max-w-md">
-            <form method="get" class="flex">
-                <input type="hidden" name="tab" value="{{ tab }}">
-                <input type="text" name="search" value="{{ search }}"
-                       placeholder="Search tasks..."
-                       class="flex-1 min-w-0 block w-full px-3 py-2 rounded-l-md border border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                <button type="submit" 
-                        class="inline-flex items-center px-4 py-2 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 text-gray-700 hover:bg-gray-100">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                    </svg>
-                </button>
-            </form>
-        </div>
-        
-        <!-- Filters -->
-        <div class="flex space-x-2">
-            <form method="get" class="flex space-x-2">
-                <input type="hidden" name="tab" value="{{ tab }}">
-                {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
-                
-                <select name="status" onchange="this.form.submit()"
-                        class="block w-32 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                    <option value="">All Status</option>
-                    {% for value, label in status_choices %}
-                    <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-                
-                <select name="priority" onchange="this.form.submit()"
-                        class="block w-32 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
-                    <option value="">All Priority</option>
-                    {% for value, label in priority_choices %}
-                    <option value="{{ value }}" {% if priority_filter == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </form>
+    <!-- Filter/Search Bar -->
+    <div class="bg-white rounded-lg shadow-sm p-4">
+        <form method="get" class="flex flex-wrap items-center gap-4">
+            <!-- Preserve tab -->
+            <input type="hidden" name="tab" value="{{ tab }}">
             
-            {% if status_filter or priority_filter or search %}
-            <a href="?tab={{ tab }}" 
-               class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                Clear Filters
+            <!-- Search -->
+            <div class="flex-1 min-w-[200px]">
+                <label for="search" class="sr-only">Search</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </div>
+                    <input type="text" name="search" id="search" value="{{ search }}"
+                           class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                           placeholder="Search by title, description, or reference..."
+                           hx-get="{% url 'tasks:dashboard' %}"
+                           hx-trigger="keyup changed delay:500ms"
+                           hx-target="#task-content"
+                           hx-push-url="true"
+                           hx-include="[name='tab'], [name='status'], [name='priority']">
+                </div>
+            </div>
+            
+            <!-- Status Filter -->
+            <div>
+                <label for="status" class="sr-only">Status</label>
+                <select name="status" id="status"
+                        class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                        hx-get="{% url 'tasks:dashboard' %}"
+                        hx-trigger="change"
+                        hx-target="#task-content"
+                        hx-push-url="true"
+                        hx-include="[name='tab'], [name='search'], [name='priority']">
+                    <option value="">All Statuses</option>
+                    {% for value, label in status_choices %}
+                    <option value="{{ value }}" {% if value in selected_statuses %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Priority Filter -->
+            <div>
+                <label for="priority" class="sr-only">Priority</label>
+                <select name="priority" id="priority"
+                        class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                        hx-get="{% url 'tasks:dashboard' %}"
+                        hx-trigger="change"
+                        hx-target="#task-content"
+                        hx-push-url="true"
+                        hx-include="[name='tab'], [name='search'], [name='status']">
+                    <option value="">All Priorities</option>
+                    {% for value, label in priority_choices %}
+                    <option value="{{ value }}" {% if value in selected_priorities %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Clear Filters -->
+            {% if search or selected_statuses or selected_priorities %}
+            <a href="?tab={{ tab }}" class="text-sm text-gray-500 hover:text-gray-700">
+                Clear filters
             </a>
             {% endif %}
-        </div>
+        </form>
     </div>
 
-    <!-- Task list -->
-    <div id="task-list">
-        {% include 'tasks/partials/task_list.html' %}
+    <!-- Task Content Area (HTMX Target) -->
+    <div id="task-content" 
+         hx-get="{% url 'tasks:dashboard' %}?tab={{ tab }}{% if search %}&search={{ search }}{% endif %}{% for s in selected_statuses %}&status={{ s }}{% endfor %}{% for p in selected_priorities %}&priority={{ p }}{% endfor %}"
+         hx-trigger="taskUpdated from:body"
+         hx-swap="innerHTML">
+        
+        {% if tasks %}
+        <!-- Task Table -->
+        <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Task
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {% if tab == 'i_assigned' %}Assigned To{% else %}Assignee{% endif %}
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Priority
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Deadline
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Type
+                        </th>
+                        <th scope="col" class="relative px-6 py-3">
+                            <span class="sr-only">Actions</span>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for task in tasks %}
+                    {% include 'tasks/partials/task_row.html' with task=task %}
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            <!-- Pagination -->
+            {% if tasks.has_other_pages %}
+            <div class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+                <div class="flex-1 flex justify-between sm:hidden">
+                    {% if tasks.has_previous %}
+                    <a href="?tab={{ tab }}&page={{ tasks.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% for s in selected_statuses %}&status={{ s }}{% endfor %}{% for p in selected_priorities %}&priority={{ p }}{% endfor %}"
+                       class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Previous
+                    </a>
+                    {% endif %}
+                    {% if tasks.has_next %}
+                    <a href="?tab={{ tab }}&page={{ tasks.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% for s in selected_statuses %}&status={{ s }}{% endfor %}{% for p in selected_priorities %}&priority={{ p }}{% endfor %}"
+                       class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Next
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                    <div>
+                        <p class="text-sm text-gray-700">
+                            Showing
+                            <span class="font-medium">{{ tasks.start_index }}</span>
+                            to
+                            <span class="font-medium">{{ tasks.end_index }}</span>
+                            of
+                            <span class="font-medium">{{ tasks.paginator.count }}</span>
+                            results
+                        </p>
+                    </div>
+                    <div>
+                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                            {% if tasks.has_previous %}
+                            <a href="?tab={{ tab }}&page={{ tasks.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% for s in selected_statuses %}&status={{ s }}{% endfor %}{% for p in selected_priorities %}&priority={{ p }}{% endfor %}"
+                               class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <span class="sr-only">Previous</span>
+                                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                            </a>
+                            {% endif %}
+                            
+                            {% for num in tasks.paginator.page_range %}
+                            {% if tasks.number == num %}
+                            <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-indigo-50 text-sm font-medium text-indigo-600">
+                                {{ num }}
+                            </span>
+                            {% elif num > tasks.number|add:'-3' and num < tasks.number|add:'3' %}
+                            <a href="?tab={{ tab }}&page={{ num }}{% if search %}&search={{ search }}{% endif %}{% for s in selected_statuses %}&status={{ s }}{% endfor %}{% for p in selected_priorities %}&priority={{ p }}{% endfor %}"
+                               class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                {{ num }}
+                            </a>
+                            {% endif %}
+                            {% endfor %}
+                            
+                            {% if tasks.has_next %}
+                            <a href="?tab={{ tab }}&page={{ tasks.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% for s in selected_statuses %}&status={{ s }}{% endfor %}{% for p in selected_priorities %}&priority={{ p }}{% endfor %}"
+                               class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <span class="sr-only">Next</span>
+                                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                            </a>
+                            {% endif %}
+                        </nav>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% else %}
+        <!-- Empty State -->
+        <div class="text-center py-12 bg-white rounded-lg shadow-sm">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No tasks found</h3>
+            <p class="mt-1 text-sm text-gray-500">
+                {% if search or selected_statuses or selected_priorities %}
+                Try adjusting your filters or search terms.
+                {% else %}
+                Get started by creating a new task.
+                {% endif %}
+            </p>
+            <div class="mt-6">
+                {% if search or selected_statuses or selected_priorities %}
+                <a href="?tab={{ tab }}" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    Clear filters
+                </a>
+                {% else %}
+                <a href="{% url 'tasks:task_create' %}" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                    <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Create Task
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Handle task update events to refresh the dashboard
+document.body.addEventListener('taskStatusChanged', function(evt) {
+    htmx.trigger('#task-content', 'taskUpdated');
+});
+
+// Add animation class when badge counts update
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.target.id && evt.target.id.startsWith('badge-')) {
+        evt.target.classList.add('badge-updated');
+        setTimeout(function() {
+            evt.target.classList.remove('badge-updated');
+        }, 300);
+    }
+});
+</script>
 {% endblock %}

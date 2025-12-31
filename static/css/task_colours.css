@@ -1,0 +1,505 @@
+/*
+ * Task Colors & Visual Indicators
+ * Phase 6E: Visual Polish & HTMX Enhancements
+ * 
+ * Includes:
+ * - Status background colors
+ * - Priority left-border colors
+ * - Overdue/escalated backgrounds
+ * - Hover states and transitions
+ */
+
+/* =============================================================================
+   STATUS BACKGROUND COLORS
+   Applied to task rows and cards based on status
+   ============================================================================= */
+
+.status-pending {
+    background-color: #FEF3C7; /* Yellow-100 - Warm amber tint */
+}
+
+.status-in-progress,
+.status-in_progress {
+    background-color: #DBEAFE; /* Blue-100 - Light sky blue */
+}
+
+.status-completed {
+    background-color: #D1FAE5; /* Green-100 - Soft mint */
+}
+
+.status-verified {
+    background-color: #A7F3D0; /* Green-200 - Bright mint/lime */
+    border: 1px solid #34D399; /* Green-400 border for emphasis */
+}
+
+.status-cancelled {
+    background-color: #F3F4F6; /* Gray-100 */
+    color: #6B7280; /* Gray-500 text */
+    text-decoration: line-through;
+    opacity: 0.8;
+}
+
+/* =============================================================================
+   PRIORITY LEFT-BORDER COLORS
+   4px left border to indicate task priority
+   ============================================================================= */
+
+.priority-low {
+    border-left: 4px solid #9CA3AF; /* Gray-400 */
+}
+
+.priority-medium {
+    border-left: 4px solid #3B82F6; /* Blue-500 */
+}
+
+.priority-high {
+    border-left: 4px solid #F59E0B; /* Amber-500 */
+}
+
+.priority-critical {
+    border-left: 4px solid #EF4444; /* Red-500 */
+    animation: critical-pulse 2s ease-in-out infinite;
+}
+
+@keyframes critical-pulse {
+    0%, 100% {
+        border-left-color: #EF4444;
+    }
+    50% {
+        border-left-color: #B91C1C; /* Darker red pulse */
+    }
+}
+
+/* =============================================================================
+   OVERDUE TASK INDICATOR
+   Tasks past their deadline but < 72 hours overdue
+   ============================================================================= */
+
+.task-overdue {
+    background-color: #FEE2E2 !important; /* Red-100 */
+    border-left-color: #EF4444 !important; /* Red-500 */
+}
+
+.task-overdue:hover {
+    background-color: #FECACA !important; /* Red-200 on hover */
+}
+
+/* Overdue badge styling */
+.badge-overdue {
+    background-color: #FEE2E2;
+    color: #B91C1C;
+    border: 1px solid #FECACA;
+}
+
+/* =============================================================================
+   ESCALATED TASK INDICATOR (72+ hours overdue)
+   Maroon/dark red background with white text for visibility
+   ============================================================================= */
+
+.task-escalated {
+    background-color: #7F1D1D !important; /* Maroon/Dark Red-900 */
+    color: #FFFFFF !important;
+}
+
+.task-escalated:hover {
+    background-color: #991B1B !important; /* Slightly lighter on hover */
+}
+
+/* Override text colors within escalated tasks */
+.task-escalated a,
+.task-escalated span:not(.badge),
+.task-escalated .task-title,
+.task-escalated .task-meta {
+    color: #FFFFFF !important;
+}
+
+.task-escalated a:hover {
+    color: #FCA5A5 !important; /* Light red on hover */
+}
+
+/* Escalated task badges need visible contrast */
+.task-escalated .badge-status,
+.task-escalated .badge-priority {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: #FFFFFF;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Escalated badge for nav/indicators */
+.badge-escalated {
+    background-color: #7F1D1D;
+    color: #FFFFFF;
+    font-weight: 600;
+}
+
+/* =============================================================================
+   HOVER STATES FOR TASK ROWS & CARDS
+   Subtle highlight on hover for better interactivity
+   ============================================================================= */
+
+.task-row,
+.task-card {
+    transition: all 0.15s ease-in-out;
+}
+
+/* Default hover for non-overdue/escalated tasks */
+.task-row:hover:not(.task-overdue):not(.task-escalated),
+.task-card:hover:not(.task-overdue):not(.task-escalated) {
+    background-color: #F9FAFB; /* Gray-50 */
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+/* Hover state for status colors */
+.status-pending:hover:not(.task-overdue):not(.task-escalated) {
+    background-color: #FDE68A; /* Yellow-200 */
+}
+
+.status-in-progress:hover:not(.task-overdue):not(.task-escalated),
+.status-in_progress:hover:not(.task-overdue):not(.task-escalated) {
+    background-color: #BFDBFE; /* Blue-200 */
+}
+
+.status-completed:hover:not(.task-overdue):not(.task-escalated) {
+    background-color: #A7F3D0; /* Green-200 */
+}
+
+.status-verified:hover:not(.task-overdue):not(.task-escalated) {
+    background-color: #6EE7B7; /* Green-300 */
+}
+
+.status-cancelled:hover {
+    background-color: #E5E7EB; /* Gray-200 */
+}
+
+/* =============================================================================
+   TRANSITION ANIMATIONS
+   Smooth transitions for state changes
+   ============================================================================= */
+
+/* General transitions */
+.task-row,
+.task-card,
+.task-row *,
+.task-card * {
+    transition: background-color 0.2s ease,
+                color 0.2s ease,
+                border-color 0.2s ease,
+                box-shadow 0.2s ease,
+                transform 0.15s ease;
+}
+
+/* Badge animations */
+.badge {
+    transition: all 0.2s ease;
+}
+
+.badge:hover {
+    transform: scale(1.05);
+}
+
+/* Quick action button transitions */
+.quick-action-btn {
+    transition: all 0.15s ease;
+    opacity: 0.7;
+}
+
+.task-row:hover .quick-action-btn,
+.task-card:hover .quick-action-btn {
+    opacity: 1;
+}
+
+.quick-action-btn:hover {
+    transform: scale(1.1);
+}
+
+/* =============================================================================
+   HTMX LOADING INDICATORS
+   Show during HTMX requests
+   ============================================================================= */
+
+.htmx-indicator {
+    display: none;
+    opacity: 0;
+    transition: opacity 0.2s ease-in;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+    display: inline-block;
+    opacity: 1;
+}
+
+/* Loading spinner animation */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+}
+
+/* Skeleton loading placeholder */
+.skeleton {
+    background: linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* =============================================================================
+   BADGE COUNT STYLES
+   For navigation and tab badges
+   ============================================================================= */
+
+.nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    border-radius: 9999px;
+    transition: all 0.2s ease;
+}
+
+.nav-badge-pending {
+    background-color: #DBEAFE;
+    color: #1D4ED8;
+}
+
+.nav-badge-overdue {
+    background-color: #FEE2E2;
+    color: #B91C1C;
+}
+
+.nav-badge-escalated {
+    background-color: #7F1D1D;
+    color: #FFFFFF;
+}
+
+/* Animate badge when count changes */
+.badge-updated {
+    animation: badge-pop 0.3s ease;
+}
+
+@keyframes badge-pop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+/* =============================================================================
+   KANBAN CARD SPECIFIC STYLES
+   ============================================================================= */
+
+.kanban-card {
+    cursor: grab;
+    user-select: none;
+}
+
+.kanban-card:active {
+    cursor: grabbing;
+}
+
+.kanban-card.dragging {
+    opacity: 0.5;
+    transform: rotate(3deg);
+}
+
+.kanban-column.drag-over {
+    background-color: #EEF2FF; /* Indigo-50 */
+    border: 2px dashed #6366F1; /* Indigo-500 */
+}
+
+/* =============================================================================
+   TABLE ROW SPECIFIC STYLES
+   ============================================================================= */
+
+.task-table-row {
+    border-bottom: 1px solid #E5E7EB;
+}
+
+.task-table-row:last-child {
+    border-bottom: none;
+}
+
+/* Alternating row colors (optional - uncomment if desired) */
+/*
+.task-table-row:nth-child(even):not(.task-overdue):not(.task-escalated) {
+    background-color: #F9FAFB;
+}
+*/
+
+/* =============================================================================
+   STATUS BADGE PILL STYLES
+   ============================================================================= */
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+}
+
+.status-badge-pending {
+    background-color: #FEF3C7;
+    color: #92400E;
+}
+
+.status-badge-in-progress,
+.status-badge-in_progress {
+    background-color: #DBEAFE;
+    color: #1E40AF;
+}
+
+.status-badge-completed {
+    background-color: #D1FAE5;
+    color: #065F46;
+}
+
+.status-badge-verified {
+    background-color: #A7F3D0;
+    color: #047857;
+}
+
+.status-badge-cancelled {
+    background-color: #F3F4F6;
+    color: #4B5563;
+}
+
+/* =============================================================================
+   PRIORITY BADGE PILL STYLES
+   ============================================================================= */
+
+.priority-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+}
+
+.priority-badge-low {
+    background-color: #F3F4F6;
+    color: #4B5563;
+}
+
+.priority-badge-medium {
+    background-color: #DBEAFE;
+    color: #1E40AF;
+}
+
+.priority-badge-high {
+    background-color: #FEF3C7;
+    color: #92400E;
+}
+
+.priority-badge-critical {
+    background-color: #FEE2E2;
+    color: #B91C1C;
+}
+
+/* =============================================================================
+   DEADLINE DISPLAY STYLES
+   ============================================================================= */
+
+.deadline-soon {
+    color: #D97706; /* Amber-600 */
+    font-weight: 500;
+}
+
+.deadline-overdue {
+    color: #DC2626; /* Red-600 */
+    font-weight: 600;
+}
+
+.deadline-escalated {
+    color: #7F1D1D; /* Dark red */
+    font-weight: 700;
+}
+
+/* =============================================================================
+   UTILITY CLASSES
+   ============================================================================= */
+
+/* Hide elements but keep for screen readers */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Focus visible for accessibility */
+.focus-visible:focus {
+    outline: 2px solid #6366F1;
+    outline-offset: 2px;
+}
+
+/* Fade in animation for HTMX loaded content */
+.htmx-added {
+    animation: fade-in 0.3s ease;
+}
+
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Toast notification styles */
+.toast {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    padding: 1rem 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    animation: toast-slide-in 0.3s ease;
+    z-index: 9999;
+}
+
+.toast-success {
+    background-color: #D1FAE5;
+    color: #065F46;
+    border-left: 4px solid #10B981;
+}
+
+.toast-error {
+    background-color: #FEE2E2;
+    color: #B91C1C;
+    border-left: 4px solid #EF4444;
+}
+
+.toast-warning {
+    background-color: #FEF3C7;
+    color: #92400E;
+    border-left: 4px solid #F59E0B;
+}
+
+@keyframes toast-slide-in {
+    from { 
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to { 
+        transform: translateX(0);
+        opacity: 1;
+    }
+}

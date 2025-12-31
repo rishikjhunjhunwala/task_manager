@@ -1,6 +1,14 @@
+{% comment %}
+templates/tasks/partials/badge_counts.html
+Phase 6E: Badge Counts Partial
+
+Returns badge count spans for HTMX polling updates.
+Used by partials_badge_counts_full() view for full refresh.
+{% endcomment %}
+
 <span id="pending-badge" 
       class="ml-2 py-0.5 px-2.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-600">
-    {{ counts.total_pending }}
+    {{ counts.total_pending|default:0 }}
 </span>
 {% if counts.overdue > 0 %}
 <span id="overdue-badge"

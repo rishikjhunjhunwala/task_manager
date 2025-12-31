@@ -1199,3 +1199,71 @@ def management_overview(request):
     }
     
     return render(request, 'tasks/management_overview.html', context)
+
+from django.http import HttpResponse
+
+@login_required
+def badge_counts(request):
+    """
+    Return badge count HTML for HTMX polling.
+    
+    Supports different badge types via query parameter:
+    - nav_pending: Pending tasks for navigation badge
+    - nav_overdue: Overdue tasks for navigation badge
+    - my_personal: Personal tasks count (dashboard tab)
+    - assigned_to_me: Tasks assigned to user (dashboard tab)
+    - i_assigned: Tasks user assigned to others (dashboard tab)
+    - overdue_assigned: Overdue tasks assigned to user
+    """
+    user = request.user
+    badge_type = request.GET.get('type', 'nav_pending')
+    now = timezone.now()
+    
+    if badge_type == 'nav_pending':
+        count = Task.objects.filter(
+            assignee=user,
+            status__in=['pending', 'in_progress']
+        ).count()
+        
+    elif badge_type == 'nav_overdue':
+        count = Task.objects.filter(
+            assignee=user,
+            status__in=['pending', 'in_progress'],
+            deadline__lt=now,
+            deadline__isnull=False
+        ).count()
+        
+    elif badge_type == 'my_personal':
+        count = Task.objects.filter(
+            assignee=user,
+            created_by=user,
+            status__in=['pending', 'in_progress']
+        ).count()
+        
+    elif badge_type == 'assigned_to_me':
+        count = Task.objects.filter(
+            assignee=user,
+            status__in=['pending', 'in_progress']
+        ).exclude(created_by=user).count()
+        
+    elif badge_type == 'i_assigned':
+        count = Task.objects.filter(
+            created_by=user,
+            status__in=['pending', 'in_progress']
+        ).exclude(assignee=user).count()
+        
+    elif badge_type == 'overdue_assigned':
+        count = Task.objects.filter(
+            assignee=user,
+            status__in=['pending', 'in_progress'],
+            deadline__lt=now,
+            deadline__isnull=False
+        ).count()
+        if count > 0:
+            return HttpResponse(f'{count} overdue')
+        return HttpResponse('')
+        
+    else:
+        count = 0
+    
+    return HttpResponse(str(count))
