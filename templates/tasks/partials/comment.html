@@ -1,17 +1,63 @@
-<div class="flex space-x-3 p-4 bg-gray-50 rounded-lg">
+{% comment %}
+Single comment display template.
+
+Context variables required:
+- comment: Comment instance with author relation
+
+Used by:
+- comments_section.html (for rendering comment list)
+- add_comment_view (for HTMX append on new comment)
+
+Features:
+- Author avatar (initials circle with color based on name)
+- Author name and timestamp
+- Relative timestamp display (e.g., "2 hours ago")
+- Proper whitespace handling for comment content
+{% endcomment %}
+
+
+{% load tz %}
+
+<div class="flex space-x-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-150">
+    <!-- Author Avatar -->
     <div class="flex-shrink-0">
-        <div class="h-8 w-8 rounded-full bg-indigo-500 flex items-center justify-center">
+        <div class="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
             <span class="text-white text-sm font-medium">
-                {{ comment.author.first_name|slice:":1" }}{{ comment.author.last_name|slice:":1" }}
+                {{ comment.author.first_name|slice:":1"|upper }}{{ comment.author.last_name|slice:":1"|upper }}
             </span>
         </div>
     </div>
+    
+    <!-- Comment Content -->
     <div class="flex-1 min-w-0">
-        <p class="text-sm font-medium text-gray-900">
-            {{ comment.author.get_full_name }}
-            <span class="text-gray-500 font-normal">•</span>
-            <span class="text-gray-500 font-normal text-xs">{{ comment.created_at|date:"d M Y, g:i A" }}</span>
-        </p>
-        <p class="mt-1 text-sm text-gray-600 whitespace-pre-wrap">{{ comment.content }}</p>
+        <!-- Author Info & Timestamp -->
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p class="text-sm font-semibold text-gray-900">
+                {{ comment.author.get_full_name }}
+            </p>
+            {% if comment.author.department %}
+            <span class="text-xs text-gray-400">•</span>
+            <span class="text-xs text-gray-500">
+                {{ comment.author.department.name }}
+            </span>
+            {% endif %}
+            <span class="text-xs text-gray-400">•</span>
+            <time datetime="{{ comment.created_at|date:'c' }}" 
+                  class="text-xs text-gray-500"
+                  title="{{ comment.created_at|date:'d M Y, g:i A' }}">
+                {% with delta=comment.created_at|timesince %}
+                    {% if 'minute' in delta or 'hour' in delta or 'day' in delta %}
+                        {{ delta }} ago
+                    {% else %}
+                        {{ comment.created_at|date:"d M Y, g:i A" }}
+                    {% endif %}
+                {% endwith %}
+            </time>
+        </div>
+        
+        <!-- Comment Text -->
+        <div class="mt-2">
+            <p class="text-sm text-gray-700 whitespace-pre-wrap break-words">{{ comment.content }}</p>
+        </div>
     </div>
 </div>

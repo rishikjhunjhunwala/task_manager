@@ -1,0 +1,94 @@
+{% comment %}
+Full comments section for task detail view.
+
+Context variables required:
+- task: Task instance
+- comments: QuerySet of comments (ordered by created_at)
+- comment_form: CommentForm instance
+- can_comment: Boolean - whether user can add comments
+
+HTMX Behavior:
+- Form submits via HTMX POST to add_comment endpoint
+- New comments are appended to #comments-list
+- Form is cleared after successful submission
+- "No comments" placeholder is removed on first comment
+{% endcomment %}
+
+<div class="bg-white shadow sm:rounded-lg" id="comments-section">
+    <div class="px-4 py-5 sm:p-6">
+        <!-- Section Header with Count -->
+        <h3 class="text-lg font-medium text-gray-900 mb-4">
+            <svg class="inline-block h-5 w-5 text-gray-400 mr-2 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            </svg>
+            Comments
+            <span class="ml-1 text-sm font-normal text-gray-500">
+                ({{ comments|length }})
+            </span>
+        </h3>
+        
+        <!-- Comments List Container -->
+        <div id="comments-list" class="space-y-4 mb-6">
+            {% for comment in comments %}
+                {% include 'tasks/partials/comment.html' with comment=comment %}
+            {% empty %}
+                <p class="text-sm text-gray-500 italic py-4 text-center" id="no-comments">
+                    No comments yet. Be the first to add one!
+                </p>
+            {% endfor %}
+        </div>
+        
+        <!-- Add Comment Form -->
+        {% if can_comment %}
+        <div class="border-t border-gray-200 pt-4">
+            <form method="post" 
+                  action="{% url 'tasks:add_comment' task.pk %}"
+                  hx-post="{% url 'tasks:add_comment' task.pk %}"
+                  hx-target="#comments-list"
+                  hx-swap="beforeend"
+                  hx-on::after-request="if(event.detail.successful) { this.reset(); const noComments = document.getElementById('no-comments'); if(noComments) noComments.remove(); }"
+                  hx-indicator="#comment-loading"
+                  class="space-y-3">
+                {% csrf_token %}
+                
+                <!-- Comment Input -->
+                <div>
+                    <label for="id_content" class="sr-only">Add a comment</label>
+                    <textarea 
+                        name="content" 
+                        id="id_content"
+                        rows="3"
+                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        placeholder="Add a comment..."
+                        required></textarea>
+                </div>
+                
+                <!-- Submit Button -->
+                <div class="flex justify-end items-center space-x-3">
+                    <!-- Loading Indicator -->
+                    <span id="comment-loading" class="htmx-indicator">
+                        <svg class="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </span>
+                    
+                    <button type="submit" 
+                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150">
+                        <svg class="h-4 w-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                        </svg>
+                        Add Comment
+                    </button>
+                </div>
+            </form>
+        </div>
+        {% elif task.status == 'cancelled' %}
+        <div class="border-t border-gray-200 pt-4">
+            <p class="text-sm text-gray-500 italic text-center py-2">
+                Comments are disabled for cancelled tasks.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>

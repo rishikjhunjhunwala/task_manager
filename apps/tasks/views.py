@@ -27,7 +27,7 @@ from .services import (
 )
 from .permissions import (
     can_view_task, can_edit_task, can_change_status, can_change_task_status,
-    can_cancel_task, can_reassign_task, get_viewable_tasks, get_allowed_status_transitions, get_visible_tasks
+    can_cancel_task, can_reassign_task, get_viewable_tasks, get_allowed_status_transitions, get_visible_tasks, can_add_comment
 )
 from .filters import TaskFilter, DashboardTaskFilter, get_sorting_options, apply_sorting
 from apps.departments.models import Department
@@ -325,6 +325,8 @@ def task_detail(request, pk):
     can_status = can_change_status(request.user, task)
     can_cancel = can_cancel_task(request.user, task)
     can_reassign = can_reassign_task(request.user, task)
+    can_comment = can_add_comment(request.user, task)  
+
     
     context = {
         'task': task,
@@ -338,6 +340,8 @@ def task_detail(request, pk):
         'can_change_status': can_status,
         'can_cancel': can_cancel,
         'can_reassign': can_reassign,
+        'can_comment': can_comment,  
+
     }
     
     return render(request, 'tasks/task_detail.html', context)
@@ -514,41 +518,94 @@ def task_cancel(request, pk):
 @login_required
 @require_POST
 def add_comment_view(request, pk):
-    """Add a comment to a task (HTMX endpoint)."""
+    """
+    Add a comment to a task.
+    
+    HTMX Endpoint:
+    - On success: Returns the new comment partial for HTMX append
+    - On error: Returns error message with 400 status
+    
+    Non-HTMX Fallback:
+    - On success: Redirects to task detail with success message
+    - On error: Redirects to task detail with error message
+    
+    Business Rules:
+    - Anyone who can view the task can comment
+    - Cannot comment on cancelled tasks
+    - Comments cannot be empty (whitespace trimmed)
+    - Activity is logged for every comment added
+    """
+    
     task = get_object_or_404(Task, pk=pk)
     
-    if not can_view_task(request.user, task):
-        return HttpResponseForbidden('Permission denied')
+    # Permission check using dedicated function
+    if not can_add_comment(request.user, task):
+        error_msg = 'You cannot add comments to this task.'
+        if task.status == 'cancelled':
+            error_msg = 'Cannot add comments to cancelled tasks.'
+        
+        if request.headers.get('HX-Request'):
+            return HttpResponse(
+                f'<div class="text-red-600 text-sm p-2">{error_msg}</div>',
+                status=403
+            )
+        messages.error(request, error_msg)
+        return redirect('tasks:task_detail', pk=pk)
     
     form = CommentForm(request.POST)
+    
     if form.is_valid():
         try:
+            # Use the service layer to add comment (handles validation & activity logging)
             comment = add_comment(
                 task=task,
                 user=request.user,
                 content=form.cleaned_data['content']
             )
             
-            if request.htmx:
-                # Return just the new comment for HTMX append
+            # HTMX Response: Return just the new comment partial
+            if request.headers.get('HX-Request'):
                 return render(request, 'tasks/partials/comment.html', {
                     'comment': comment,
-                    'task': task,
                 })
             
-            messages.success(request, 'Comment added.')
+            # Non-HTMX Fallback
+            messages.success(request, 'Comment added successfully.')
+            return redirect('tasks:task_detail', pk=pk)
+            
+        except PermissionError as e:
+            error_msg = str(e)
+            if request.headers.get('HX-Request'):
+                return HttpResponse(
+                    f'<div class="text-red-600 text-sm p-2">{error_msg}</div>',
+                    status=403
+                )
+            messages.error(request, error_msg)
             return redirect('tasks:task_detail', pk=pk)
             
         except Exception as e:
-            if request.htmx:
-                return HttpResponse(f'Error: {str(e)}', status=400)
-            messages.error(request, str(e))
+            error_msg = f'Error adding comment: {str(e)}'
+            if request.headers.get('HX-Request'):
+                return HttpResponse(
+                    f'<div class="text-red-600 text-sm p-2">{error_msg}</div>',
+                    status=400
+                )
+            messages.error(request, error_msg)
+            return redirect('tasks:task_detail', pk=pk)
     
-    if request.htmx:
-        return HttpResponse('Invalid comment', status=400)
+    # Form validation failed
+    error_msg = 'Comment cannot be empty.'
+    if form.errors:
+        error_msg = '; '.join([f'{field}: {", ".join(errors)}' for field, errors in form.errors.items()])
     
+    if request.headers.get('HX-Request'):
+        return HttpResponse(
+            f'<div class="text-red-600 text-sm p-2">{error_msg}</div>',
+            status=400
+        )
+    
+    messages.error(request, error_msg)
     return redirect('tasks:task_detail', pk=pk)
-
 
 # =============================================================================
 # Attachment Views

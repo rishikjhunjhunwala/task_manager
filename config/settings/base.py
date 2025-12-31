@@ -41,15 +41,16 @@ LOCAL_APPS = [
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'apps.accounts.middleware.SessionIdleTimeoutMiddleware',
-    'apps.accounts.middleware.PasswordChangeRequiredMiddleware',
-    'apps.accounts.middleware.PasswordExpiryMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',  
+    'apps.accounts.middleware.SessionIdleTimeoutMiddleware',  
+    'apps.accounts.middleware.PasswordChangeRequiredMiddleware',  
+    'apps.accounts.middleware.PasswordExpiryMiddleware',  
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_htmx.middleware.HtmxMiddleware',
 ]
