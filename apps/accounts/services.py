@@ -36,7 +36,8 @@ def generate_temp_password(length=16):
     uppercase = string.ascii_uppercase
     lowercase = string.ascii_lowercase
     digits = string.digits
-    special = '!@#$%^&*()_+-=[]{}|;:,.<>?'
+    special = '!@#$%^&*()_+-=[]{}|;:,.?'    
+
     
     # Ensure at least one of each required type
     password = [
