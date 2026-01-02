@@ -1,108 +1,27 @@
 """
-Permission helpers for tasks app.
+Permission functions for tasks app.
 
-Role-based access control for task operations:
-- Admin: Full access to all tasks
-- Senior Manager 1/2: View all tasks, assign to anyone
-- Manager: View department tasks, assign within department
-- Employee: View own tasks only, create personal tasks only
+This module contains all permission-checking functions used throughout the
+tasks application. Each function encapsulates specific business rules for
+determining what actions users can perform.
+
+Role Hierarchy:
+- Admin: Full access to everything
+- Senior Manager 1/2: Can view all tasks, manage escalations
+- Manager: Can view department tasks, assign within department
+- Employee: Can only see/manage their own tasks
+
+UPDATED in Phase 7B:
+- can_add_comment: Now restricts to creator/assignee/admin/SM only
+- can_add_attachment: Now restricts to creator/assignee/admin/SM only
 """
 
 from django.db.models import Q
-from .models import Task
 
 
 # =============================================================================
 # View Permissions
 # =============================================================================
-
-def get_allowed_status_transitions(task, user):
-    """
-    Get list of status values this task can transition to.
-    
-    Used by Kanban drag-and-drop to determine valid drop targets.
-    """
-    from .models import Task
-    
-    allowed = []
-    
-    # Check if user can change this task's status at all
-    if not can_change_task_status(user, task):
-        return allowed
-    
-    # Get current status
-    current_status = task.status
-    
-    # Terminal states - no transitions allowed
-    if current_status in [Task.Status.CANCELLED, Task.Status.VERIFIED]:
-        return allowed
-    
-    # Personal completed tasks are terminal
-    if task.is_personal and current_status == Task.Status.COMPLETED:
-        return allowed
-    
-    # Define valid forward transitions
-    transitions = {
-        Task.Status.PENDING: [Task.Status.IN_PROGRESS],
-        Task.Status.IN_PROGRESS: [Task.Status.COMPLETED],
-        Task.Status.COMPLETED: [Task.Status.VERIFIED] if task.is_delegated else [],
-    }
-    
-    # Get allowed transitions for current status
-    allowed = transitions.get(current_status, [])
-    
-    # For verification, only creator/admin can verify
-    if Task.Status.VERIFIED in allowed:
-        if not (user == task.created_by or user.is_admin()):
-            allowed.remove(Task.Status.VERIFIED)
-    
-    return allowed
-
-
-def can_change_task_status(user, task):
-    """
-    Check if user can change the status of a task.
-    """
-    # Admin can change anything
-    if user.is_admin():
-        return True
-    
-    # Assignee can progress their own tasks
-    if user == task.assignee:
-        return True
-    
-    # Creator can verify delegated tasks
-    if user == task.created_by and task.is_delegated:
-        return True
-    
-    return False
-
-
-def get_visible_tasks(user):
-    """
-    Get queryset of tasks visible to this user based on their role.
-    """
-    from .models import Task
-    
-    base_qs = Task.objects.all()
-    
-    # Admin and Senior Managers see everything
-    if user.can_view_all_tasks():
-        return base_qs
-    
-    # Manager sees department tasks
-    if user.can_view_department_tasks() and user.department:
-        return base_qs.filter(
-            Q(department=user.department) |
-            Q(assignee=user) |
-            Q(created_by=user)
-        ).distinct()
-    
-    # Employee sees only their own tasks
-    return base_qs.filter(
-        Q(assignee=user) | Q(created_by=user)
-    ).distinct()
-
 
 def can_view_task(user, task):
     """
@@ -142,6 +61,8 @@ def get_viewable_tasks(user):
     
     Returns Task queryset filtered by user's role.
     """
+    from .models import Task
+    
     if not user.is_authenticated:
         return Task.objects.none()
     
@@ -168,6 +89,33 @@ def get_viewable_tasks(user):
     
     # Employee sees own tasks only
     return queryset.filter(
+        Q(assignee=user) | Q(created_by=user)
+    ).distinct()
+
+
+def get_visible_tasks(user):
+    """
+    Get queryset of tasks visible to this user based on their role.
+    Alias for get_viewable_tasks for backwards compatibility.
+    """
+    from .models import Task
+    
+    base_qs = Task.objects.all()
+    
+    # Admin and Senior Managers see everything
+    if user.can_view_all_tasks():
+        return base_qs
+    
+    # Manager sees department tasks
+    if user.can_view_department_tasks() and user.department:
+        return base_qs.filter(
+            Q(department=user.department) |
+            Q(assignee=user) |
+            Q(created_by=user)
+        ).distinct()
+    
+    # Employee sees only their own tasks
+    return base_qs.filter(
         Q(assignee=user) | Q(created_by=user)
     ).distinct()
 
@@ -234,6 +182,11 @@ def can_change_status(user, task):
         return True
     
     return False
+
+
+def can_change_task_status(user, task):
+    """Alias for can_change_status for backwards compatibility."""
+    return can_change_status(user, task)
 
 
 def can_reassign_task(user, task):
@@ -364,33 +317,123 @@ def get_assignable_users(user):
 
 
 # =============================================================================
-# Comment & Attachment Permissions
+# Status Transition Logic
+# =============================================================================
+
+def get_allowed_status_transitions(user, task):
+    """
+    Get list of status values the user can transition to.
+    
+    Returns list of (value, display) tuples for form choices.
+    """
+    from .models import Task
+    
+    if not can_change_status(user, task):
+        return []
+    
+    current = task.status
+    transitions = []
+    
+    # Define possible transitions based on current status
+    if current == 'pending':
+        transitions = [('in_progress', 'In Progress')]
+    elif current == 'in_progress':
+        transitions = [('completed', 'Completed')]
+    elif current == 'completed':
+        # Only delegated tasks can be verified
+        if task.task_type == 'delegated':
+            transitions = [('verified', 'Verified')]
+    
+    # Admin can also transition back (for corrections)
+    if user.role == 'admin':
+        if current == 'in_progress':
+            transitions.append(('pending', 'Pending'))
+        elif current == 'completed':
+            transitions.append(('in_progress', 'In Progress'))
+    
+    return transitions
+
+
+# =============================================================================
+# Comment & Attachment Permissions (UPDATED in Phase 7B)
 # =============================================================================
 
 def can_add_comment(user, task):
     """
     Check if user can add a comment to a task.
     
-    Rules:
-    - Anyone who can view the task can comment
+    Rules (UPDATED in Phase 7B - more restrictive):
     - Cannot comment on cancelled tasks
+    - Only these users can comment:
+      - Task creator
+      - Task assignee
+      - Admin
+      - Senior Manager 1
+      - Senior Manager 2
+    
+    NOTE: This is more restrictive than can_view_task.
+    Managers and Employees who can VIEW a task but are NOT the 
+    creator/assignee should NOT be able to comment.
     """
+    if not user.is_authenticated:
+        return False
+    
+    # Cannot comment on cancelled tasks
     if task.status == 'cancelled':
         return False
-    return can_view_task(user, task)
+    
+    # Admin and Senior Managers can always comment
+    if user.role in ['admin', 'senior_manager_1', 'senior_manager_2']:
+        return True
+    
+    # Task creator can comment
+    if task.created_by_id == user.pk:
+        return True
+    
+    # Task assignee can comment
+    if task.assignee_id == user.pk:
+        return True
+    
+    return False
 
 
 def can_add_attachment(user, task):
     """
     Check if user can add/replace attachment on a task.
     
-    Rules:
-    - Anyone who can view the task can add attachment
+    Rules (UPDATED in Phase 7B - more restrictive):
     - Cannot add to cancelled or verified tasks
+    - Only these users can add attachments:
+      - Task creator
+      - Task assignee
+      - Admin
+      - Senior Manager 1
+      - Senior Manager 2
+    
+    NOTE: This is more restrictive than can_view_task.
+    Managers and Employees who can VIEW a task but are NOT the 
+    creator/assignee should NOT be able to add attachments.
     """
+    if not user.is_authenticated:
+        return False
+    
+    # Cannot add to terminal states
     if task.status in ['cancelled', 'verified']:
         return False
-    return can_view_task(user, task)
+    
+    # Admin and Senior Managers can always add attachments
+    if user.role in ['admin', 'senior_manager_1', 'senior_manager_2']:
+        return True
+    
+    # Task creator can add attachment
+    if task.created_by_id == user.pk:
+        return True
+    
+    # Task assignee can add attachment
+    if task.assignee_id == user.pk:
+        return True
+    
+    return False
 
 
 def can_remove_attachment(user, task):
@@ -398,18 +441,27 @@ def can_remove_attachment(user, task):
     Check if user can remove attachment from a task.
     
     Rules:
-    - Task creator or admin can remove
-    - Attachment uploader can remove
+    - Cannot remove from cancelled or verified tasks
+    - Admin can always remove
+    - Task creator can remove
+    - Attachment uploader can remove their own upload
     """
+    if not user.is_authenticated:
+        return False
+    
+    # Cannot remove from terminal states
     if task.status in ['cancelled', 'verified']:
         return False
     
+    # Admin can always remove
     if user.role == 'admin':
         return True
     
+    # Task creator can remove
     if task.created_by_id == user.pk:
         return True
     
+    # Attachment uploader can remove
     try:
         if task.attachment.uploaded_by_id == user.pk:
             return True
