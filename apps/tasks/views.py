@@ -606,24 +606,53 @@ def upload_attachment(request, pk):
 
 @login_required
 def download_attachment(request, pk):
-    """Download task attachment."""
+    """
+    Download task attachment.
+    
+    Security:
+    - Only users who can view the task can download
+    - Files served through view, not direct media URL
+    - Original filename preserved in Content-Disposition header
+    
+    Returns:
+    - FileResponse with proper headers for browser download
+    - Redirect to task detail if no attachment exists
+    """
+    import mimetypes
+    
     task = get_object_or_404(Task, pk=pk)
     
-    # Anyone who can view the task can download the attachment
+    # Permission check - anyone who can view the task can download
     if not can_view_task(request.user, task):
         return HttpResponseForbidden('Permission denied')
     
     try:
         attachment = task.attachment
-        return FileResponse(
+        
+        # Detect MIME type from filename
+        content_type, _ = mimetypes.guess_type(attachment.filename)
+        if content_type is None:
+            content_type = 'application/octet-stream'
+        
+        # Create streaming response
+        response = FileResponse(
             attachment.file.open('rb'),
             as_attachment=True,
-            filename=attachment.filename
+            filename=attachment.filename,
+            content_type=content_type
         )
+        
+        # Set content length for download progress
+        response['Content-Length'] = attachment.file_size
+        
+        return response
+        
     except Attachment.DoesNotExist:
         messages.error(request, 'No attachment found.')
         return redirect('tasks:task_detail', pk=pk)
-
+    except FileNotFoundError:
+        messages.error(request, 'Attachment file not found on server.')
+        return redirect('tasks:task_detail', pk=pk)
 
 @login_required
 @require_POST
