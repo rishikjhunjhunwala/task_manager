@@ -1,0 +1,181 @@
+{% load report_tags %}
+
+{# Summary Statistics Cards - 4 status cards in responsive grid #}
+{# Shows: Pending, In Progress, Completed, Overdue counts #}
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+    
+    <!-- Pending Card (Yellow Theme) -->
+    <div class="bg-white rounded-lg shadow overflow-hidden border-l-4 border-yellow-400 hover:shadow-md transition-shadow">
+        <div class="p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="p-3 bg-yellow-100 rounded-full">
+                        <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">
+                            Pending
+                        </dt>
+                        <dd class="flex items-baseline">
+                            <div class="text-3xl font-bold text-yellow-600">
+                                {{ summary.pending }}
+                            </div>
+                            <span class="ml-2 text-sm text-gray-500">
+                                tasks
+                            </span>
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+            <div class="mt-4">
+                <div class="text-xs text-gray-500">
+                    Awaiting action
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- In Progress Card (Blue Theme) -->
+    <div class="bg-white rounded-lg shadow overflow-hidden border-l-4 border-blue-400 hover:shadow-md transition-shadow">
+        <div class="p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="p-3 bg-blue-100 rounded-full">
+                        <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">
+                            In Progress
+                        </dt>
+                        <dd class="flex items-baseline">
+                            <div class="text-3xl font-bold text-blue-600">
+                                {{ summary.in_progress }}
+                            </div>
+                            <span class="ml-2 text-sm text-gray-500">
+                                tasks
+                            </span>
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+            <div class="mt-4">
+                <div class="text-xs text-gray-500">
+                    Currently being worked on
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Completed Card (Green Theme) -->
+    <div class="bg-white rounded-lg shadow overflow-hidden border-l-4 border-green-400 hover:shadow-md transition-shadow">
+        <div class="p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="p-3 bg-green-100 rounded-full">
+                        <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">
+                            Completed
+                        </dt>
+                        <dd class="flex items-baseline">
+                            <div class="text-3xl font-bold text-green-600">
+                                {{ summary.completed }}
+                            </div>
+                            <span class="ml-2 text-sm text-gray-500">
+                                tasks
+                            </span>
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+            <div class="mt-4">
+                <div class="text-xs text-gray-500">
+                    Completed &amp; verified
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Overdue Card (Red Theme) -->
+    <div class="bg-white rounded-lg shadow overflow-hidden border-l-4 border-red-400 hover:shadow-md transition-shadow {% if summary.overdue > 0 %}ring-2 ring-red-200{% endif %}">
+        <div class="p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="p-3 {% if summary.overdue > 0 %}bg-red-200{% else %}bg-red-100{% endif %} rounded-full">
+                        <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate">
+                            Overdue
+                        </dt>
+                        <dd class="flex items-baseline">
+                            <div class="text-3xl font-bold text-red-600">
+                                {{ summary.overdue }}
+                            </div>
+                            <span class="ml-2 text-sm text-gray-500">
+                                tasks
+                            </span>
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+            <div class="mt-4">
+                <div class="text-xs {% if summary.overdue > 0 %}text-red-600 font-medium{% else %}text-gray-500{% endif %}">
+                    {% if summary.overdue > 0 %}
+                        Requires immediate attention!
+                    {% else %}
+                        No overdue tasks
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Totals -->
+<div class="mt-6 bg-white rounded-lg shadow p-4">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center space-x-2">
+            <span class="text-sm font-medium text-gray-500">Total Active Tasks:</span>
+            <span class="text-lg font-bold text-gray-900">{{ summary.total_active }}</span>
+        </div>
+        
+        {% if summary.overdue > 0 %}
+        <div class="flex items-center space-x-2 text-red-600">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            <span class="text-sm font-medium">
+                {{ summary.overdue }} task{{ summary.overdue|pluralize }} past deadline
+            </span>
+        </div>
+        {% else %}
+        <div class="flex items-center space-x-2 text-green-600">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+            <span class="text-sm font-medium">
+                All tasks are on track
+            </span>
+        </div>
+        {% endif %}
+    </div>
+</div>

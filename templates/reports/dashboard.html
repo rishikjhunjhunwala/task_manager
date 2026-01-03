@@ -1,19 +1,161 @@
 {% extends 'base.html' %}
+{% load report_tags %}
 
-{% block title %}Access Denied{% endblock %}
+{% block title %}Reports Dashboard - Task Manager{% endblock %}
 
 {% block content %}
-<div class="min-h-[60vh] flex items-center justify-center">
-    <div class="text-center">
-        <h1 class="text-6xl font-bold text-gray-300">403</h1>
-        <h2 class="mt-4 text-2xl font-semibold text-gray-700">Access Denied</h2>
-        <p class="mt-2 text-gray-500">
-            {{ message|default:"You do not have permission to access this page." }}
-        </p>
-        <a href="{% url 'tasks:dashboard' %}" 
-           class="mt-6 inline-block px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
-            Return to Dashboard
-        </a>
+<div class="space-y-6">
+    <!-- Page Header with Breadcrumb -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div>
+            <!-- Breadcrumb -->
+            <nav class="flex mb-2" aria-label="Breadcrumb">
+                <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                    <li class="inline-flex items-center">
+                        <a href="{% url 'tasks:dashboard' %}" class="inline-flex items-center text-sm font-medium text-gray-500 hover:text-indigo-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
+                            </svg>
+                            Dashboard
+                        </a>
+                    </li>
+                    <li aria-current="page">
+                        <div class="flex items-center">
+                            <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <span class="ml-1 text-sm font-medium text-gray-700 md:ml-2">Reports</span>
+                        </div>
+                    </li>
+                </ol>
+            </nav>
+            
+            <h1 class="text-2xl font-bold text-gray-900">{{ page_title }}</h1>
+            <p class="mt-1 text-sm text-gray-500">
+                {% if can_filter_departments %}
+                    Viewing: {{ current_department_name }}
+                {% else %}
+                    Showing data for {{ current_department_name }}
+                {% endif %}
+            </p>
+        </div>
+        
+        <!-- Department Filter (SM/Admin only) -->
+        {% if can_filter_departments %}
+        <div class="mt-4 sm:mt-0">
+            <form method="get" class="flex items-center space-x-2">
+                <label for="department" class="text-sm font-medium text-gray-700">Department:</label>
+                <select name="department" 
+                        id="department"
+                        class="block w-48 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                        onchange="this.form.submit()">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk }}" {% if selected_department_id == dept.pk %}selected{% endif %}>
+                        {{ dept.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <noscript>
+                    <button type="submit" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Filter
+                    </button>
+                </noscript>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Tab Navigation -->
+    <div class="border-b border-gray-200" x-data="{ activeTab: '{{ request.GET.tab|default:'overview' }}' }">
+        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+            <button @click="activeTab = 'overview'" 
+                    :class="activeTab === 'overview' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                    class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                <svg class="w-5 h-5 inline-block mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                </svg>
+                Overview
+            </button>
+            
+            <button @click="activeTab = 'users'" 
+                    :class="activeTab === 'users' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                    class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                <svg class="w-5 h-5 inline-block mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                </svg>
+                By User
+                {% if user_breakdown %}
+                <span class="ml-1 py-0.5 px-2 rounded-full text-xs bg-gray-100 text-gray-600">
+                    {{ user_page_obj.paginator.count }}
+                </span>
+                {% endif %}
+            </button>
+            
+            <button @click="activeTab = 'overdue'" 
+                    :class="activeTab === 'overdue' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                    class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                <svg class="w-5 h-5 inline-block mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Overdue
+                {% if overdue_count > 0 %}
+                <span class="ml-1 py-0.5 px-2 rounded-full text-xs bg-red-100 text-red-600 font-semibold">
+                    {{ overdue_count }}
+                </span>
+                {% endif %}
+            </button>
+            
+            <button @click="activeTab = 'escalated'" 
+                    :class="activeTab === 'escalated' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                    class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                <svg class="w-5 h-5 inline-block mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                Escalated
+                {% if escalated_count > 0 %}
+                <span class="ml-1 py-0.5 px-2 rounded-full text-xs bg-red-600 text-white font-semibold">
+                    {{ escalated_count }}
+                </span>
+                {% endif %}
+            </button>
+        </nav>
+        
+        <!-- Tab Content Panels -->
+        <div class="mt-6">
+            <!-- Overview Tab -->
+            <div x-show="activeTab === 'overview'" x-cloak>
+                {% include 'reports/partials/summary_cards.html' %}
+            </div>
+            
+            <!-- Users Tab -->
+            <div x-show="activeTab === 'users'" x-cloak>
+                {% include 'reports/partials/user_breakdown.html' %}
+            </div>
+            
+            <!-- Overdue Tab -->
+            <div x-show="activeTab === 'overdue'" x-cloak>
+                {% include 'reports/partials/overdue_list.html' %}
+            </div>
+            
+            <!-- Escalated Tab -->
+            <div x-show="activeTab === 'escalated'" x-cloak>
+                {% include 'reports/partials/escalated_list.html' %}
+            </div>
+        </div>
     </div>
 </div>
+
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Hide content until Alpine.js initializes */
+    [x-cloak] { display: none !important; }
+    
+    /* Smooth tab transitions */
+    [x-show] {
+        transition: opacity 0.15s ease-in-out;
+    }
+</style>
 {% endblock %}

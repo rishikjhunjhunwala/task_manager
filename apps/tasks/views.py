@@ -79,24 +79,36 @@ def dashboard(request):
     ).exclude(assignee=user)
     
     # Apply dashboard filters if provided
-    filter_form = DashboardTaskFilter(request.GET)
+    # Get filter values from request.GET directly since DashboardTaskFilter
+    # is a django-filter FilterSet, not a Django Form
+    status_filter = request.GET.getlist('status')  # Multi-select returns list
+    priority_filter = request.GET.getlist('priority')  # Multi-select returns list
+    search_filter = request.GET.get('search', '').strip()
     
-    if filter_form.is_valid():
-        status = filter_form.cleaned_data.get('status')
-        priority = filter_form.cleaned_data.get('priority')
-        deadline_filter = filter_form.cleaned_data.get('deadline_filter')
-        
-        for qs_name in ['my_personal', 'assigned_to_me', 'i_assigned']:
-            qs = locals()[qs_name]
-            
-            if status:
-                qs = qs.filter(status=status)
-            if priority:
-                qs = qs.filter(priority=priority)
-            if deadline_filter:
-                qs = filter_form.apply_deadline_filter(qs, deadline_filter)
-            
-            locals()[qs_name] = qs
+    # Apply filters to each queryset
+    if status_filter:
+        my_personal = my_personal.filter(status__in=status_filter)
+        assigned_to_me = assigned_to_me.filter(status__in=status_filter)
+        i_assigned = i_assigned.filter(status__in=status_filter)
+    
+    if priority_filter:
+        my_personal = my_personal.filter(priority__in=priority_filter)
+        assigned_to_me = assigned_to_me.filter(priority__in=priority_filter)
+        i_assigned = i_assigned.filter(priority__in=priority_filter)
+    
+    if search_filter:
+        from django.db.models import Q
+        search_q = (
+            Q(title__icontains=search_filter) |
+            Q(description__icontains=search_filter) |
+            Q(reference_number__icontains=search_filter)
+        )
+        my_personal = my_personal.filter(search_q)
+        assigned_to_me = assigned_to_me.filter(search_q)
+        i_assigned = i_assigned.filter(search_q)
+    
+    # Create filter form for template display
+    filter_form = DashboardTaskFilter(request.GET, queryset=Task.objects.none())
     
     # Get active tab
     active_tab = request.GET.get('tab', 'my_personal')
@@ -141,9 +153,8 @@ def task_list(request):
     queryset = get_viewable_tasks(user)
     
     # Apply filters
-    filter_form = TaskFilter(request.GET, user=user)
-    if filter_form.is_valid():
-        queryset = filter_form.filter_queryset(queryset)
+    filter_form = TaskFilter(request.GET, queryset=queryset, request=request)
+    queryset = filter_form.qs
     
     # Apply sorting
     sort_options = get_sorting_options()
@@ -855,9 +866,9 @@ def department_tasks(request):
         departments = Department.objects.filter(pk=user.department_id) if user.department else Department.objects.none()
     
     # Apply filters
-    filter_form = TaskFilter(request.GET, user=user)
-    if filter_form.is_valid():
-        queryset = filter_form.filter_queryset(queryset)
+    filter_form = TaskFilter(request.GET, queryset=queryset, request=request)
+    queryset = filter_form.qs
+
     
     # Pagination
     paginator = Paginator(queryset.order_by('-created_at'), 20)
