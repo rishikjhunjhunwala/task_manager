@@ -1,0 +1,134 @@
+{# Single activity row for the activity log table #}
+{# Used for potential HTMX updates later #}
+
+<tr class="hover:bg-gray-50" id="activity-row-{{ activity.id }}">
+    <!-- Timestamp -->
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+        <div class="flex flex-col">
+            <span class="font-medium text-gray-900">
+                {{ activity.created_at|date:"M d, Y" }}
+            </span>
+            <span class="text-gray-500">
+                {{ activity.created_at|time:"H:i" }}
+            </span>
+        </div>
+    </td>
+
+    <!-- User -->
+    <td class="px-6 py-4 whitespace-nowrap">
+        <div class="flex items-center">
+            <div class="flex-shrink-0 h-8 w-8">
+                <span class="inline-flex items-center justify-center h-8 w-8 rounded-full bg-gray-500">
+                    <span class="text-xs font-medium leading-none text-white">
+                        {{ activity.user.first_name|slice:":1" }}{{ activity.user.last_name|slice:":1" }}
+                    </span>
+                </span>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm font-medium text-gray-900" title="{{ activity.user.email }}">
+                    {{ activity.user.get_full_name }}
+                </p>
+                <p class="text-xs text-gray-500">
+                    {{ activity.user.get_role_display }}
+                </p>
+            </div>
+        </div>
+    </td>
+
+    <!-- Task Reference -->
+    <td class="px-6 py-4 whitespace-nowrap">
+        <a href="{% url 'tasks:task_detail' activity.task.pk %}" 
+           class="text-sm font-medium text-indigo-600 hover:text-indigo-900 hover:underline">
+            {{ activity.task.reference_number }}
+        </a>
+        <p class="text-xs text-gray-500 truncate max-w-xs" title="{{ activity.task.title }}">
+            {{ activity.task.title|truncatechars:30 }}
+        </p>
+    </td>
+
+    <!-- Action Badge -->
+    <td class="px-6 py-4 whitespace-nowrap">
+        {% if activity.action_type == 'created' %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/>
+            </svg>
+            Created
+        </span>
+        {% elif activity.action_type == 'updated' %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+            </svg>
+            Updated
+        </span>
+        {% elif activity.action_type == 'status_changed' %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+            Status Changed
+        </span>
+        {% elif activity.action_type == 'reassigned' %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z"/>
+            </svg>
+            Reassigned
+        </span>
+        {% elif activity.action_type == 'commented' %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"/>
+            </svg>
+            Commented
+        </span>
+        {% elif activity.action_type == 'attachment_added' %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8 4a3 3 0 00-3 3v4a5 5 0 0010 0V7a1 1 0 112 0v4a7 7 0 11-14 0V7a5 5 0 0110 0v4a3 3 0 11-6 0V7a1 1 0 012 0v4a1 1 0 102 0V7a3 3 0 00-3-3z" clip-rule="evenodd"/>
+            </svg>
+            Attachment Added
+        </span>
+        {% elif activity.action_type == 'attachment_replaced' %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/>
+            </svg>
+            Attachment Replaced
+        </span>
+        {% elif activity.action_type == 'cancelled' %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+            </svg>
+            Cancelled
+        </span>
+        {% elif activity.action_type == 'verified' %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+            <svg class="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+            </svg>
+            Verified
+        </span>
+        {% else %}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+            {{ activity.get_action_type_display }}
+        </span>
+        {% endif %}
+    </td>
+
+    <!-- Description -->
+    <td class="px-6 py-4 text-sm text-gray-500">
+        <p class="max-w-md truncate" title="{{ activity.description }}">
+            {{ activity.description|truncatechars:80 }}
+        </p>
+        {% if activity.old_value and activity.new_value %}
+        <p class="text-xs text-gray-400 mt-1">
+            <span class="line-through">{{ activity.old_value|truncatechars:20 }}</span>
+            →
+            <span class="text-gray-600">{{ activity.new_value|truncatechars:20 }}</span>
+        </p>
+        {% endif %}
+    </td>
+</tr>

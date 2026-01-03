@@ -3,207 +3,286 @@
 {% block title %}Activity Log - Task Manager{% endblock %}
 
 {% block content %}
-<div class="bg-white shadow overflow-hidden sm:rounded-lg">
-    <!-- Header -->
-    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
-        <div class="flex items-center justify-between">
+<div class="space-y-6">
+    <!-- Header with Breadcrumb -->
+    <div>
+        <nav class="flex mb-2" aria-label="Breadcrumb">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li class="inline-flex items-center">
+                    <a href="{% url 'tasks:dashboard' %}" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
+                        </svg>
+                        Dashboard
+                    </a>
+                </li>
+                <li>
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                        </svg>
+                        <span class="ml-1 text-gray-500 md:ml-2 font-medium">Activity Log</span>
+                    </div>
+                </li>
+            </ol>
+        </nav>
+        <div class="sm:flex sm:items-center sm:justify-between">
             <div>
                 <h1 class="text-2xl font-bold text-gray-900">Activity Log</h1>
                 <p class="mt-1 text-sm text-gray-500">
-                    Showing {{ filtered_count }} of {{ total_count }} activities
+                    Audit trail of all task activities across the system
                 </p>
             </div>
+            <div class="mt-4 sm:mt-0 flex items-center space-x-2">
+                <!-- Total count badge -->
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+                    {{ total_count }} entr{{ total_count|pluralize:"y,ies" }}
+                </span>
+            </div>
         </div>
     </div>
 
-    <!-- Filters (Basic - will be enhanced in Phase 8B) -->
-    <div class="px-4 py-4 sm:px-6 bg-gray-50 border-b border-gray-200">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
-            <!-- Task Filter -->
-            <div>
-                <label for="id_task" class="block text-sm font-medium text-gray-700">Task</label>
-                {{ filter.form.task }}
-            </div>
-            
-            <!-- User Filter -->
-            <div>
-                <label for="id_user" class="block text-sm font-medium text-gray-700">User</label>
-                {{ filter.form.user }}
-            </div>
-            
-            <!-- Action Type Filter -->
-            <div>
-                <label for="id_action_type" class="block text-sm font-medium text-gray-700">Action</label>
-                {{ filter.form.action_type }}
-            </div>
-            
-            <!-- Date From -->
-            <div>
-                <label for="id_date_from" class="block text-sm font-medium text-gray-700">From Date</label>
-                {{ filter.form.date_from }}
-            </div>
-            
-            <!-- Date To -->
-            <div>
-                <label for="id_date_to" class="block text-sm font-medium text-gray-700">To Date</label>
-                {{ filter.form.date_to }}
-            </div>
-            
-            <!-- Actions -->
-            <div class="flex items-end space-x-2">
-                <button type="submit" 
-                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    Filter
-                </button>
-                {% if is_filtered %}
-                <a href="{% url 'activity_log:activity_list' %}" 
-                   class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    Clear
-                </a>
-                {% endif %}
-            </div>
-        </form>
-    </div>
+    <!-- Filter Section -->
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Filters</h3>
+            <form method="get" action="{% url 'activity_log:activity_list' %}" id="filter-form">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                    <!-- Task Filter -->
+                    <div>
+                        <label for="task" class="block text-sm font-medium text-gray-700">Task</label>
+                        <select name="task" id="task"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <option value="">All Tasks</option>
+                            {% for task in tasks_list %}
+                            <option value="{{ task.id }}" {% if request.GET.task == task.id|stringformat:"s" %}selected{% endif %}>
+                                {{ task.reference_number }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-    <!-- Activity List -->
-    <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Timestamp
-                    </th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Task
-                    </th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        User
-                    </th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Action
-                    </th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Description
-                    </th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                {% for activity in activities %}
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {{ activity.created_at|date:"M d, Y" }}<br>
-                        <span class="text-xs">{{ activity.created_at|time:"H:i" }}</span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <a href="{% url 'tasks:task_detail' activity.task.id %}" 
-                           class="text-sm font-medium text-indigo-600 hover:text-indigo-900">
-                            {{ activity.task.reference_number }}
-                        </a>
-                        <div class="text-xs text-gray-500 truncate max-w-xs">
-                            {{ activity.task.title|truncatechars:40 }}
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="text-sm text-gray-900">
-                            {{ activity.user.get_full_name|default:activity.user.email }}
-                        </div>
-                        <div class="text-xs text-gray-500">
-                            {{ activity.user.get_role_display }}
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                            {% if activity.action_type == 'created' %}bg-green-100 text-green-800
-                            {% elif activity.action_type == 'updated' %}bg-blue-100 text-blue-800
-                            {% elif activity.action_type == 'status_changed' %}bg-purple-100 text-purple-800
-                            {% elif activity.action_type == 'reassigned' %}bg-yellow-100 text-yellow-800
-                            {% elif activity.action_type == 'commented' %}bg-gray-100 text-gray-800
-                            {% elif activity.action_type == 'cancelled' %}bg-red-100 text-red-800
-                            {% elif activity.action_type == 'verified' %}bg-emerald-100 text-emerald-800
-                            {% else %}bg-gray-100 text-gray-800{% endif %}">
-                            {{ activity.get_action_type_display }}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-500 max-w-md">
-                        <div class="truncate" title="{{ activity.description }}">
-                            {{ activity.description|truncatechars:80 }}
-                        </div>
-                        {% if activity.field_name %}
-                        <div class="text-xs text-gray-400 mt-1">
-                            Field: {{ activity.field_name }}
-                            {% if activity.old_value %} | Old: {{ activity.old_value|truncatechars:20 }}{% endif %}
-                            {% if activity.new_value %} | New: {{ activity.new_value|truncatechars:20 }}{% endif %}
-                        </div>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="5" class="px-6 py-12 text-center text-gray-500">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                    <!-- User Filter -->
+                    <div>
+                        <label for="user" class="block text-sm font-medium text-gray-700">User</label>
+                        <select name="user" id="user"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <option value="">All Users</option>
+                            {% for u in users_list %}
+                            <option value="{{ u.id }}" {% if request.GET.user == u.id|stringformat:"s" %}selected{% endif %}>
+                                {{ u.get_full_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Action Type Filter -->
+                    <div>
+                        <label for="action_type" class="block text-sm font-medium text-gray-700">Action Type</label>
+                        <select name="action_type" id="action_type"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <option value="">All Actions</option>
+                            {% for value, label in action_choices %}
+                            <option value="{{ value }}" {% if request.GET.action_type == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Date From -->
+                    <div>
+                        <label for="date_from" class="block text-sm font-medium text-gray-700">Date From</label>
+                        <input type="date" name="date_from" id="date_from"
+                               value="{{ request.GET.date_from }}"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+
+                    <!-- Date To -->
+                    <div>
+                        <label for="date_to" class="block text-sm font-medium text-gray-700">Date To</label>
+                        <input type="date" name="date_to" id="date_to"
+                               value="{{ request.GET.date_to }}"
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                </div>
+
+                <!-- Filter Buttons -->
+                <div class="mt-4 flex items-center space-x-3">
+                    <button type="submit"
+                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
                         </svg>
-                        <p class="mt-2 text-sm">No activities found</p>
-                        {% if is_filtered %}
-                        <p class="mt-1 text-xs">Try adjusting your filters</p>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                        Filter
+                    </button>
+                    <a href="{% url 'activity_log:activity_list' %}"
+                       class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        Clear
+                    </a>
+                </div>
+            </form>
+        </div>
     </div>
 
-    <!-- Pagination -->
-    {% if activities.has_other_pages %}
-    <div class="px-4 py-3 bg-gray-50 border-t border-gray-200 sm:px-6">
-        <div class="flex items-center justify-between">
-            <div class="text-sm text-gray-700">
-                Showing 
-                <span class="font-medium">{{ activities.start_index }}</span>
-                to 
-                <span class="font-medium">{{ activities.end_index }}</span>
-                of 
-                <span class="font-medium">{{ filtered_count }}</span>
-                results
-            </div>
-            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                {% if activities.has_previous %}
-                <a href="?page={{ activities.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}"
-                   class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                    <span class="sr-only">Previous</span>
-                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                </a>
-                {% endif %}
-                
-                {% for num in activities.paginator.page_range %}
-                    {% if activities.number == num %}
-                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-indigo-50 text-sm font-medium text-indigo-600">
-                        {{ num }}
-                    </span>
-                    {% elif num > activities.number|add:'-3' and num < activities.number|add:'3' %}
-                    <a href="?page={{ num }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}"
-                       class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        {{ num }}
+    <!-- Results Table -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        {% if activities %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Timestamp
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            User
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Task
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Action
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Description
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200" id="activity-table-body">
+                    {% for activity in activities %}
+                    {% include 'activity_log/partials/activity_row.html' with activity=activity %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if activities.has_other_pages %}
+        <div class="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+            <div class="flex items-center justify-between">
+                <div class="flex-1 flex justify-between sm:hidden">
+                    {% if activities.has_previous %}
+                    <a href="?page={{ activities.previous_page_number }}{% if request.GET.task %}&task={{ request.GET.task }}{% endif %}{% if request.GET.user %}&user={{ request.GET.user }}{% endif %}{% if request.GET.action_type %}&action_type={{ request.GET.action_type }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}"
+                       class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Previous
                     </a>
                     {% endif %}
-                {% endfor %}
-                
-                {% if activities.has_next %}
-                <a href="?page={{ activities.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}"
-                   class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                    <span class="sr-only">Next</span>
-                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-                    </svg>
-                </a>
-                {% endif %}
-            </nav>
+                    {% if activities.has_next %}
+                    <a href="?page={{ activities.next_page_number }}{% if request.GET.task %}&task={{ request.GET.task }}{% endif %}{% if request.GET.user %}&user={{ request.GET.user }}{% endif %}{% if request.GET.action_type %}&action_type={{ request.GET.action_type }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}"
+                       class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Next
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                    <div>
+                        <p class="text-sm text-gray-700">
+                            Showing
+                            <span class="font-medium">{{ activities.start_index }}</span>
+                            to
+                            <span class="font-medium">{{ activities.end_index }}</span>
+                            of
+                            <span class="font-medium">{{ activities.paginator.count }}</span>
+                            results
+                        </p>
+                    </div>
+                    <div>
+                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                            {% if activities.has_previous %}
+                            <a href="?page={{ activities.previous_page_number }}{% if request.GET.task %}&task={{ request.GET.task }}{% endif %}{% if request.GET.user %}&user={{ request.GET.user }}{% endif %}{% if request.GET.action_type %}&action_type={{ request.GET.action_type }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}"
+                               class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <span class="sr-only">Previous</span>
+                                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                            </a>
+                            {% else %}
+                            <span class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-gray-100 text-sm font-medium text-gray-400 cursor-not-allowed">
+                                <span class="sr-only">Previous</span>
+                                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                            </span>
+                            {% endif %}
+
+                            <!-- Page Numbers -->
+                            {% for num in activities.paginator.page_range %}
+                                {% if activities.number == num %}
+                                <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-indigo-50 text-sm font-medium text-indigo-600">
+                                    {{ num }}
+                                </span>
+                                {% elif num > activities.number|add:'-3' and num < activities.number|add:'3' %}
+                                <a href="?page={{ num }}{% if request.GET.task %}&task={{ request.GET.task }}{% endif %}{% if request.GET.user %}&user={{ request.GET.user }}{% endif %}{% if request.GET.action_type %}&action_type={{ request.GET.action_type }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}"
+                                   class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                    {{ num }}
+                                </a>
+                                {% elif num == 1 or num == activities.paginator.num_pages %}
+                                <a href="?page={{ num }}{% if request.GET.task %}&task={{ request.GET.task }}{% endif %}{% if request.GET.user %}&user={{ request.GET.user }}{% endif %}{% if request.GET.action_type %}&action_type={{ request.GET.action_type }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}"
+                                   class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                    {{ num }}
+                                </a>
+                                {% elif num == activities.number|add:'-3' or num == activities.number|add:'3' %}
+                                <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                    ...
+                                </span>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if activities.has_next %}
+                            <a href="?page={{ activities.next_page_number }}{% if request.GET.task %}&task={{ request.GET.task }}{% endif %}{% if request.GET.user %}&user={{ request.GET.user }}{% endif %}{% if request.GET.action_type %}&action_type={{ request.GET.action_type }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}"
+                               class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <span class="sr-only">Next</span>
+                                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                            </a>
+                            {% else %}
+                            <span class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-gray-100 text-sm font-medium text-gray-400 cursor-not-allowed">
+                                <span class="sr-only">Next</span>
+                                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                                </svg>
+                            </span>
+                            {% endif %}
+                        </nav>
+                    </div>
+                </div>
+            </div>
+            <!-- Page X of Y display -->
+            <div class="mt-2 text-center text-sm text-gray-500">
+                Page {{ activities.number }} of {{ activities.paginator.num_pages }}
+            </div>
         </div>
+        {% endif %}
+
+        {% else %}
+        <!-- Empty State -->
+        <div class="text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No activity records found</h3>
+            <p class="mt-1 text-sm text-gray-500">
+                {% if request.GET %}
+                Try adjusting your filters to see more results.
+                {% else %}
+                Activity records will appear here as users interact with tasks.
+                {% endif %}
+            </p>
+            {% if request.GET %}
+            <div class="mt-6">
+                <a href="{% url 'activity_log:activity_list' %}"
+                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Clear all filters
+                </a>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 {% endblock %}
