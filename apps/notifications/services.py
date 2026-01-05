@@ -862,10 +862,251 @@ def notify_task_reassigned(task, new_assignee, reassigned_by) -> bool:
     return result
 
 # =============================================================================
-# Notification Functions Placeholder (Future Phases)
+# Phase 9D: Deadline & Overdue Reminder Notification Functions
 # =============================================================================
-#
 
-# Phase 9D:
-# - notify_deadline_reminder(task) -> 24-hour deadline warning
-# - notify_overdue(task) -> Daily overdue reminder
+def notify_deadline_reminder(task) -> bool:
+    """
+    Send 24-hour deadline reminder to assignee.
+    
+    This function sends a reminder email to the task assignee when their
+    task deadline is approximately 24 hours away. This gives them advance
+    notice to complete the task before it becomes overdue.
+    
+    Rules:
+    - Sent approximately 24 hours before deadline (triggered by scheduler)
+    - Only for tasks WITH deadlines
+    - Only for tasks in 'pending' or 'in_progress' status
+    - Sender: System email (DEFAULT_FROM_EMAIL)
+    - Recipient: Task assignee only
+    
+    Args:
+        task: Task model instance with deadline, status, assignee, etc.
+    
+    Returns:
+        bool: True if email was sent successfully, False otherwise
+    """
+    # Rule: Only send for tasks with deadlines
+    if not task.deadline:
+        logger.debug(
+            f"Skipping deadline reminder - no deadline set: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Rule: Only send for active tasks (pending or in_progress)
+    if task.status not in ['pending', 'in_progress']:
+        logger.debug(
+            f"Skipping deadline reminder - task not active "
+            f"(status={task.status}): {task.reference_number}"
+        )
+        return False
+    
+    # Validate that assignee has email
+    if not task.assignee or not task.assignee.email:
+        logger.error(
+            f"Cannot send deadline reminder - assignee has no email: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Calculate hours remaining until deadline
+    now = timezone.now()
+    time_remaining = task.deadline - now
+    hours_remaining = max(0, int(time_remaining.total_seconds() / 3600))
+    
+    # Build task URL
+    task_url = get_task_url(task)
+    
+    # Format deadline for display
+    deadline_formatted = format_datetime_for_email(task.deadline)
+    
+    # Get priority display info
+    priority_info = get_priority_display(task.priority)
+    
+    # Truncate description if too long (keep first 300 chars for reminder)
+    description_truncated = task.description
+    if task.description and len(task.description) > 300:
+        description_truncated = task.description[:297] + '...'
+    
+    # Get creator name for delegated tasks
+    creator_name = ''
+    if task.task_type == 'delegated' and task.created_by:
+        creator_name = get_user_display_name(task.created_by)
+    
+    # Build template context
+    context = {
+        'task': task,
+        'task_url': task_url,
+        'assignee': task.assignee,
+        'assignee_name': get_user_display_name(task.assignee),
+        'hours_remaining': hours_remaining,
+        'deadline_formatted': deadline_formatted,
+        'priority_info': priority_info,
+        'description_truncated': description_truncated,
+        'creator_name': creator_name,
+    }
+    
+    # Build subject line with reminder indicator
+    subject = f"[Reminder] Task Due Tomorrow: {task.title}"
+    
+    # Send the email (uses DEFAULT_FROM_EMAIL)
+    result = send_notification_email(
+        to_email=task.assignee.email,
+        subject=subject,
+        template_name='deadline_reminder',
+        context=context,
+    )
+    
+    if result:
+        logger.info(
+            f"Deadline reminder sent: task={task.reference_number}, "
+            f"to={task.assignee.email}, hours_remaining={hours_remaining}"
+        )
+    else:
+        logger.warning(
+            f"Failed to send deadline reminder: "
+            f"task={task.reference_number}, to={task.assignee.email}"
+        )
+    
+    return result
+
+
+def notify_overdue(task, is_first_reminder: bool = False) -> bool:
+    """
+    Send overdue reminder to BOTH assignee AND creator.
+    
+    Rules:
+    - Sent to BOTH assignee AND creator (2 separate emails)
+    - Only for tasks that are past their deadline
+    - Only for tasks in 'pending' or 'in_progress' status
+    - First reminder has different tone (more urgent, explains escalation)
+    - Daily reminders have escalation timeline status
+    - If assignee == creator, only one email is sent
+    
+    Args:
+        task: Task model instance
+        is_first_reminder: bool - If True, first overdue notice (more urgent)
+    
+    Returns:
+        bool: True if at least one email was sent successfully
+    """
+    # Rule: Only send for tasks with deadlines
+    if not task.deadline:
+        logger.debug(
+            f"Skipping overdue reminder - no deadline set: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Rule: Only send for tasks that are actually overdue
+    now = timezone.now()
+    if task.deadline >= now:
+        logger.debug(
+            f"Skipping overdue reminder - task not yet overdue: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Rule: Only send for active tasks (pending or in_progress)
+    if task.status not in ['pending', 'in_progress']:
+        logger.debug(
+            f"Skipping overdue reminder - task not active "
+            f"(status={task.status}): {task.reference_number}"
+        )
+        return False
+    
+    # Calculate how long the task has been overdue
+    time_overdue = now - task.deadline
+    hours_overdue = int(time_overdue.total_seconds() / 3600)
+    days_overdue = int(hours_overdue / 24)
+    
+    # Calculate hours until escalation milestones
+    hours_until_sm2_escalation = max(0, 72 - hours_overdue)
+    hours_until_sm1_escalation = max(0, 120 - hours_overdue)
+    
+    # Build task URL
+    task_url = get_task_url(task)
+    
+    # Format deadline for display
+    deadline_formatted = format_datetime_for_email(task.deadline)
+    
+    # Get priority display info
+    priority_info = get_priority_display(task.priority)
+    
+    # Get user display names
+    assignee_name = get_user_display_name(task.assignee) if task.assignee else 'Unknown'
+    creator_name = get_user_display_name(task.created_by) if task.created_by else 'Unknown'
+    
+    # Build base template context
+    base_context = {
+        'task': task,
+        'task_url': task_url,
+        'assignee_name': assignee_name,
+        'creator_name': creator_name,
+        'hours_overdue': hours_overdue,
+        'days_overdue': days_overdue,
+        'hours_until_sm2_escalation': hours_until_sm2_escalation,
+        'hours_until_sm1_escalation': hours_until_sm1_escalation,
+        'is_first_reminder': is_first_reminder,
+        'deadline_formatted': deadline_formatted,
+        'priority_info': priority_info,
+    }
+    
+    # Build subject line
+    subject = f"[OVERDUE] {task.title} - Action Required"
+    
+    # Collect recipients (deduplicate if assignee == creator)
+    recipients = []
+    
+    # Add assignee if they have email
+    if task.assignee and task.assignee.email:
+        recipients.append({
+            'user': task.assignee,
+            'email': task.assignee.email,
+            'name': assignee_name,
+            'is_assignee': True,
+        })
+    
+    # Add creator if different from assignee and has email
+    if task.created_by and task.created_by.email:
+        if not task.assignee or task.created_by_id != task.assignee_id:
+            recipients.append({
+                'user': task.created_by,
+                'email': task.created_by.email,
+                'name': creator_name,
+                'is_assignee': False,
+            })
+    
+    # Send emails to all recipients
+    any_sent = False
+    for recipient in recipients:
+        context = {
+            **base_context,
+            'recipient': recipient['user'],
+            'recipient_name': recipient['name'],
+        }
+        
+        result = send_notification_email(
+            to_email=recipient['email'],
+            subject=subject,
+            template_name='overdue_reminder',
+            context=context,
+        )
+        
+        if result:
+            any_sent = True
+            role = 'assignee' if recipient['is_assignee'] else 'creator'
+            logger.info(
+                f"Overdue reminder sent to {role}: "
+                f"task={task.reference_number}, to={recipient['email']}, "
+                f"hours_overdue={hours_overdue}"
+            )
+        else:
+            role = 'assignee' if recipient['is_assignee'] else 'creator'
+            logger.warning(
+                f"Failed to send overdue reminder to {role}: "
+                f"task={task.reference_number}, to={recipient['email']}"
+            )
+    
+    return any_sent

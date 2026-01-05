@@ -84,9 +84,10 @@ def create_task(
             description=description_text
         )
         
-        # TODO: Notify assignee if delegated (Phase 9)
-        # if task.task_type == 'delegated':
-        #     notify_task_assigned(task)
+        # Phase 9D: Notify assignee if delegated task
+        if task.task_type == 'delegated':
+            from apps.notifications.services import notify_task_assigned
+            notify_task_assigned(task)
     
     return task
 
@@ -236,11 +237,13 @@ def change_status(task, user, new_status):
             new_value=new_status
         )
         
-        # TODO: Send notifications (Phase 9)
-        # if new_status == 'completed' and task.task_type == 'delegated':
-        #     notify_task_completed(task)
-        # elif new_status == 'verified':
-        #     notify_task_verified(task)
+        # Phase 9D: Send notifications based on status change
+        if new_status == 'completed' and task.task_type == 'delegated':
+            from apps.notifications.services import notify_task_completed
+            notify_task_completed(task)
+        elif new_status == 'verified':
+            from apps.notifications.services import notify_task_verified
+            notify_task_verified(task)
     
     return task
 
@@ -295,8 +298,9 @@ def reassign_task(task, user, new_assignee):
             new_value=new_assignee.email
         )
         
-        # TODO: Notify new assignee only (Phase 9)
-        # notify_task_assigned(task)
+        # Phase 9D: Notify NEW assignee only (old assignee is NOT notified per requirements)
+        from apps.notifications.services import notify_task_reassigned
+        notify_task_reassigned(task, new_assignee, user)
     
     return task
 
@@ -342,9 +346,10 @@ def cancel_task(task, user, reason=None):
             description=description
         )
         
-        # TODO: Notify assignee (Phase 9)
-        # if task.task_type == 'delegated':
-        #     notify_task_cancelled(task, reason)
+        # Phase 9D: Notify assignee of cancellation (for delegated tasks)
+        if task.task_type == 'delegated' and task.assignee_id != user.pk:
+            from apps.notifications.services import notify_task_cancelled
+            notify_task_cancelled(task, reason or 'No reason provided', user)
     
     return task
 

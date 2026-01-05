@@ -1,0 +1,38 @@
+{% extends "notifications/emails/base_email.txt" %}
+
+{% block content %}
+⏰ DEADLINE REMINDER
+================================================================================
+
+Hello {{ assignee_name }},
+
+This is a friendly reminder that the following task is due within 
+{{ hours_remaining }} hours:
+
+TASK DETAILS
+--------------------------------------------------------------------------------
+
+Title: {{ task.title }}
+Reference: {{ task.reference_number }}
+Priority: {{ priority_info.name }}
+Deadline: {{ deadline_formatted }}
+Time Left: ~{{ hours_remaining }} hours remaining
+Current Status: {{ task.get_status_display }}
+{% if task.task_type == 'delegated' %}Assigned by: {{ creator_name }}{% endif %}
+
+{% if description_truncated %}
+Description:
+{{ description_truncated }}
+{% endif %}
+
+--------------------------------------------------------------------------------
+
+ACTION REQUIRED: Please ensure this task is completed before the deadline.
+If you anticipate any delays, update the task status or contact your supervisor.
+
+--------------------------------------------------------------------------------
+
+Complete this task: {{ task_url }}
+
+Click the link above to view the task and update its status.
+{% endblock %}

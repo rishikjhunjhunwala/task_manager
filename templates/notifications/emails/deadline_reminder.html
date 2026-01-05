@@ -1,0 +1,80 @@
+{% extends "notifications/emails/base_email.html" %}
+
+{% block title %}Task Due Tomorrow - {{ task.reference_number }}{% endblock %}
+
+{% block content %}
+<h2>⏰ Deadline Reminder</h2>
+
+<p>Hello {{ assignee_name }},</p>
+
+<p>This is a friendly reminder that the following task is due <strong>within {{ hours_remaining }} hours</strong>:</p>
+
+<div class="task-details">
+    <h3 style="margin: 0 0 16px 0; color: #1e3a5f; font-size: 18px;">{{ task.title }}</h3>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 0;">
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; width: 130px;">Reference:</td>
+            <td style="padding: 8px 0; color: #1e293b; font-weight: 500;">{{ task.reference_number }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Priority:</td>
+            <td style="padding: 8px 0;">
+                <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #ffffff; background-color: {{ priority_info.color }};">
+                    {{ priority_info.name }}
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Deadline:</td>
+            <td style="padding: 8px 0;">
+                <!-- Prominent deadline display with warning color -->
+                <span style="color: #d97706; font-weight: 700; font-size: 15px;">
+                    {{ deadline_formatted }}
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Time Left:</td>
+            <td style="padding: 8px 0;">
+                <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #ffffff; background-color: #f59e0b;">
+                    ~{{ hours_remaining }} hours remaining
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Current Status:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ task.get_status_display }}</td>
+        </tr>
+        {% if task.task_type == 'delegated' %}
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Assigned by:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ creator_name }}</td>
+        </tr>
+        {% endif %}
+    </table>
+    
+    {% if description_truncated %}
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+        <p style="margin: 0 0 8px 0; color: #64748b; font-size: 14px;">Description:</p>
+        <p style="margin: 0; color: #475569; white-space: pre-wrap;">{{ description_truncated }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Urgency notice -->
+<div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px; padding: 16px; margin: 24px 0;">
+    <p style="margin: 0; color: #92400e; font-size: 14px;">
+        <strong>Action Required:</strong> Please ensure this task is completed before the deadline. 
+        If you anticipate any delays, update the task status or contact your supervisor.
+    </p>
+</div>
+
+<div class="button-container">
+    <a href="{{ task_url }}" class="button" style="background-color: #f59e0b;">Complete Task Now</a>
+</div>
+
+<p style="color: #64748b; font-size: 14px;">
+    Click the button above to view the task and update its status.
+</p>
+{% endblock %}

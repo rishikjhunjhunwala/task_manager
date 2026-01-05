@@ -1,0 +1,118 @@
+{% extends "notifications/emails/base_email.html" %}
+
+{% block title %}OVERDUE: {{ task.title }} - {{ task.reference_number }}{% endblock %}
+
+{% block content %}
+<!-- URGENT Header with red accent -->
+<div style="background-color: #fef2f2; border: 2px solid #dc2626; border-radius: 8px; padding: 16px; margin-bottom: 24px; text-align: center;">
+    <h2 style="margin: 0; color: #dc2626; font-size: 22px; font-weight: 700;">
+        🚨 URGENT: Task Overdue
+    </h2>
+</div>
+
+<p>Hello {{ recipient_name }},</p>
+
+{% if is_first_reminder %}
+<p>This task has <strong>passed its deadline</strong> and requires immediate attention. Please review and take action as soon as possible.</p>
+{% else %}
+<p>This is a reminder that the following task remains <strong>overdue</strong> and still requires completion:</p>
+{% endif %}
+
+<div class="task-details" style="border-left-color: #dc2626;">
+    <h3 style="margin: 0 0 16px 0; color: #dc2626; font-size: 18px;">{{ task.title }}</h3>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 0;">
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; width: 140px;">Reference:</td>
+            <td style="padding: 8px 0; color: #1e293b; font-weight: 500;">{{ task.reference_number }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Priority:</td>
+            <td style="padding: 8px 0;">
+                <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #ffffff; background-color: {{ priority_info.color }};">
+                    {{ priority_info.name }}
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Original Deadline:</td>
+            <td style="padding: 8px 0;">
+                <span style="color: #dc2626; font-weight: 600; text-decoration: line-through;">
+                    {{ deadline_formatted }}
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Overdue By:</td>
+            <td style="padding: 8px 0;">
+                <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #ffffff; background-color: #dc2626;">
+                    {% if days_overdue >= 1 %}{{ days_overdue }} day{{ days_overdue|pluralize }} ({{ hours_overdue }} hours){% else %}{{ hours_overdue }} hour{{ hours_overdue|pluralize }}{% endif %}
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Current Status:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ task.get_status_display }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Assignee:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ assignee_name }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Created by:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ creator_name }}</td>
+        </tr>
+    </table>
+</div>
+
+{% if is_first_reminder %}
+<!-- First overdue notice - explain escalation process -->
+<div style="background-color: #fef2f2; border-left: 4px solid #dc2626; border-radius: 4px; padding: 16px; margin: 24px 0;">
+    <p style="margin: 0 0 12px 0; color: #991b1b; font-size: 14px; font-weight: 600;">
+        ⚠️ Escalation Notice
+    </p>
+    <p style="margin: 0 0 8px 0; color: #7f1d1d; font-size: 14px;">
+        This task has just become overdue. If not completed, it will be escalated according to the following timeline:
+    </p>
+    <ul style="margin: 8px 0 0 0; padding-left: 20px; color: #7f1d1d; font-size: 13px;">
+        <li style="margin-bottom: 4px;"><strong>72 hours overdue:</strong> Senior Manager 2 will be notified</li>
+        <li style="margin-bottom: 4px;"><strong>120 hours overdue:</strong> Senior Manager 1 will be notified</li>
+    </ul>
+    <p style="margin: 12px 0 0 0; color: #7f1d1d; font-size: 14px;">
+        Please complete or update this task immediately to avoid escalation.
+    </p>
+</div>
+{% else %}
+<!-- Daily reminder - remind of escalation timeline -->
+<div style="background-color: #fef2f2; border-left: 4px solid #dc2626; border-radius: 4px; padding: 16px; margin: 24px 0;">
+    <p style="margin: 0 0 8px 0; color: #991b1b; font-size: 14px; font-weight: 600;">
+        ⚠️ Escalation Reminder
+    </p>
+    {% if hours_overdue < 72 %}
+    <p style="margin: 0; color: #7f1d1d; font-size: 14px;">
+        This task will be escalated to Senior Manager 2 in <strong>{{ hours_until_sm2_escalation }} hours</strong> if not completed.
+    </p>
+    {% elif hours_overdue < 120 %}
+    <p style="margin: 0 0 8px 0; color: #7f1d1d; font-size: 14px;">
+        ✓ This task has been escalated to Senior Manager 2.
+    </p>
+    <p style="margin: 0; color: #7f1d1d; font-size: 14px;">
+        It will be escalated to Senior Manager 1 in <strong>{{ hours_until_sm1_escalation }} hours</strong> if not completed.
+    </p>
+    {% else %}
+    <p style="margin: 0; color: #7f1d1d; font-size: 14px;">
+        ✓ This task has been escalated to both Senior Manager 2 and Senior Manager 1.
+        <br>Immediate action is required.
+    </p>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="button-container">
+    <a href="{{ task_url }}" class="button" style="background-color: #dc2626;">Update Task Status</a>
+</div>
+
+<p style="color: #64748b; font-size: 14px;">
+    Click the button above to view the task details and update its status.
+</p>
+{% endblock %}

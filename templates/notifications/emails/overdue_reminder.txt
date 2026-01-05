@@ -1,0 +1,63 @@
+{% extends "notifications/emails/base_email.txt" %}
+
+{% block content %}
+================================================================================
+🚨 URGENT: TASK OVERDUE - ACTION REQUIRED
+================================================================================
+
+Hello {{ recipient_name }},
+
+{% if is_first_reminder %}
+This task has PASSED ITS DEADLINE and requires immediate attention. Please 
+review and take action as soon as possible.
+{% else %}
+This is a reminder that the following task remains OVERDUE and still 
+requires completion:
+{% endif %}
+
+TASK DETAILS
+--------------------------------------------------------------------------------
+
+Title: {{ task.title }}
+Reference: {{ task.reference_number }}
+Priority: {{ priority_info.name }}
+Original Deadline: {{ deadline_formatted }} (MISSED)
+Overdue By: {% if days_overdue >= 1 %}{{ days_overdue }} day{{ days_overdue|pluralize }} ({{ hours_overdue }} hours){% else %}{{ hours_overdue }} hour{{ hours_overdue|pluralize }}{% endif %}
+Current Status: {{ task.get_status_display }}
+Assignee: {{ assignee_name }}
+Created by: {{ creator_name }}
+
+--------------------------------------------------------------------------------
+
+{% if is_first_reminder %}
+⚠️ ESCALATION NOTICE
+
+This task has just become overdue. If not completed, it will be escalated 
+according to the following timeline:
+
+  • 72 hours overdue: Senior Manager 2 will be notified
+  • 120 hours overdue: Senior Manager 1 will be notified
+
+Please complete or update this task immediately to avoid escalation.
+{% else %}
+⚠️ ESCALATION REMINDER
+
+{% if hours_overdue < 72 %}
+This task will be escalated to Senior Manager 2 in {{ hours_until_sm2_escalation }} hours 
+if not completed.
+{% elif hours_overdue < 120 %}
+✓ This task has been escalated to Senior Manager 2.
+It will be escalated to Senior Manager 1 in {{ hours_until_sm1_escalation }} hours 
+if not completed.
+{% else %}
+✓ This task has been escalated to both Senior Manager 2 and Senior Manager 1.
+Immediate action is required.
+{% endif %}
+{% endif %}
+
+--------------------------------------------------------------------------------
+
+Update this task: {{ task_url }}
+
+Click the link above to view the task details and update its status.
+{% endblock %}
