@@ -1,0 +1,24 @@
+cat > templates/notifications/emails/test.html << 'EOF'
+{% extends "notifications/emails/base_email.html" %}
+
+{% block content %}
+<h2>Test Email Notification</h2>
+
+<p>Hello,</p>
+
+<p>This is a test email from the Task Manager notification system. If you're seeing this message, the email configuration is working correctly!</p>
+
+{% if message %}
+<div class="task-details">
+    <h3>Test Message</h3>
+    <p>{{ message }}</p>
+</div>
+{% endif %}
+
+<div class="button-container">
+    <a href="{{ app_url }}" class="button">Open Task Manager</a>
+</div>
+
+<p>This email was sent to verify the notification system is functioning properly.</p>
+{% endblock %}
+EOF

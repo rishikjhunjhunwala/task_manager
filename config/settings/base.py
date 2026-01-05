@@ -159,6 +159,9 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+APP_NAME = 'Task Manager'
+APP_URL = config('APP_URL', default='http://localhost:8000')
+COMPANY_NAME = 'Century Extrusions / CNFC India'
 
 # =============================================================================
 # FILE UPLOAD SETTINGS

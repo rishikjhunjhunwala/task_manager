@@ -1,0 +1,17 @@
+{{ app_name }}
+{{ company_name }}
+================================================================================
+
+{% block content %}
+This is a notification from {{ app_name }}.
+{% endblock %}
+
+--------------------------------------------------------------------------------
+{% block footer %}
+Open {{ app_name }}: {{ app_url }}
+
+This is an automated notification.
+For support, contact {{ support_email }}
+
+(c) {{ current_year }} {{ company_name }}. All rights reserved.
+{% endblock %}

@@ -1,0 +1,21 @@
+{{ app_name }} - Test Email
+================================================================================
+
+Hello,
+
+This is a test email from the Task Manager notification system. If you're 
+seeing this message, the email configuration is working correctly!
+
+{% if message %}
+Test Message:
+{{ message }}
+{% endif %}
+
+Open Task Manager: {{ app_url }}
+
+This email was sent to verify the notification system is functioning properly.
+
+--------------------------------------------------------------------------------
+This is an automated notification from {{ app_name }}.
+For support, contact {{ support_email }}
+(c) {{ current_year }} {{ company_name }}
