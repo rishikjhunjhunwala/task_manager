@@ -1,0 +1,28 @@
+{% extends "notifications/emails/base_email.txt" %}
+
+{% block content %}
+TASK MARKED AS COMPLETE
+================================================================================
+
+Hello {{ creator_name }},
+
+Good news! {{ assignee_name }} has marked the following task as complete:
+
+TASK DETAILS
+--------------------------------------------------------------------------------
+
+Title: {{ task.title }}
+Reference: {{ task.reference_number }}
+Completed by: {{ assignee_name }}
+Completed at: {{ completed_at_formatted }}
+Status: Completed
+
+--------------------------------------------------------------------------------
+
+ACTION REQUIRED: Please review and verify this task to confirm it has been 
+completed satisfactorily.
+
+Verify this task: {{ task_url }}
+
+Click the link above to review the task and mark it as verified.
+{% endblock %}

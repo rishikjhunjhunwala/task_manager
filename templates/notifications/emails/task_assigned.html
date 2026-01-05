@@ -1,0 +1,55 @@
+{% extends "notifications/emails/base_email.html" %}
+
+{% block title %}Task Assigned - {{ task.reference_number }}{% endblock %}
+
+{% block content %}
+<h2>New Task Assigned to You</h2>
+
+<p>Hello {{ assignee_name }},</p>
+
+<p>A new task has been assigned to you by <strong>{{ creator_name }}</strong>{% if creator_department %} ({{ creator_department }}){% endif %}.</p>
+
+<div class="task-details">
+    <h3 style="margin: 0 0 16px 0; color: #1e3a5f; font-size: 18px;">{{ task.title }}</h3>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 0;">
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; width: 130px;">Reference:</td>
+            <td style="padding: 8px 0; color: #1e293b; font-weight: 500;">{{ task.reference_number }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Priority:</td>
+            <td style="padding: 8px 0;">
+                <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #ffffff; background-color: {{ priority_info.color }};">
+                    {{ priority_info.name }}
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Deadline:</td>
+            <td style="padding: 8px 0; color: {% if has_deadline %}#1e293b{% else %}#94a3b8{% endif %}; font-weight: {% if has_deadline %}500{% else %}400{% endif %};">
+                {{ deadline_formatted }}
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Assigned by:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ creator_name }}</td>
+        </tr>
+    </table>
+    
+    {% if description_truncated %}
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+        <p style="margin: 0 0 8px 0; color: #64748b; font-size: 14px;">Description:</p>
+        <p style="margin: 0; color: #475569; white-space: pre-wrap;">{{ description_truncated }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="button-container">
+    <a href="{{ task_url }}" class="button">View Task</a>
+</div>
+
+<p style="color: #64748b; font-size: 14px;">
+    Click the button above to view the full task details and get started.
+</p>
+{% endblock %}
