@@ -1,0 +1,27 @@
+{% extends "notifications/emails/base_email.txt" %}
+
+{% block content %}
+YOUR TASK HAS BEEN VERIFIED!
+================================================================================
+
+Hello {{ assignee_name }},
+
+Great news! {{ verified_by_name }} has reviewed and verified your completed 
+work on the following task:
+
+TASK DETAILS
+--------------------------------------------------------------------------------
+
+Title: {{ task.title }}
+Reference: {{ task.reference_number }}
+Verified by: {{ verified_by_name }}
+Verified at: {{ verified_at_formatted }}
+Status: Verified
+
+--------------------------------------------------------------------------------
+
+WELL DONE! This task has been successfully completed and verified.
+Thank you for your excellent work.
+
+View this task: {{ task_url }}
+{% endblock %}

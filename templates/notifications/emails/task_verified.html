@@ -1,0 +1,53 @@
+{% extends "notifications/emails/base_email.html" %}
+
+{% block title %}Task Verified - {{ task.reference_number }}{% endblock %}
+
+{% block content %}
+<h2>🎉 Your Task Has Been Verified!</h2>
+
+<p>Hello {{ assignee_name }},</p>
+
+<p>Great news! <strong>{{ verified_by_name }}</strong> has reviewed and verified your completed work on the following task:</p>
+
+<div class="task-details">
+    <h3 style="margin: 0 0 16px 0; color: #1e3a5f; font-size: 18px;">{{ task.title }}</h3>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 0;">
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; width: 130px;">Reference:</td>
+            <td style="padding: 8px 0; color: #1e293b; font-weight: 500;">{{ task.reference_number }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Verified by:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ verified_by_name }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Verified at:</td>
+            <td style="padding: 8px 0; color: #1e293b; font-weight: 500;">{{ verified_at_formatted }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Status:</td>
+            <td style="padding: 8px 0;">
+                <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #ffffff; background-color: #8b5cf6;">
+                    Verified
+                </span>
+            </td>
+        </tr>
+    </table>
+</div>
+
+<!-- Success message box -->
+<div style="background-color: #ecfdf5; border-left: 4px solid #22c55e; border-radius: 4px; padding: 16px; margin: 24px 0;">
+    <p style="margin: 0; color: #166534; font-size: 14px;">
+        <strong>Well done!</strong> This task has been successfully completed and verified. Thank you for your excellent work.
+    </p>
+</div>
+
+<div class="button-container">
+    <a href="{{ task_url }}" class="button" style="background-color: #8b5cf6;">View Task</a>
+</div>
+
+<p style="color: #64748b; font-size: 14px;">
+    Click the button above to view the complete task details.
+</p>
+{% endblock %}

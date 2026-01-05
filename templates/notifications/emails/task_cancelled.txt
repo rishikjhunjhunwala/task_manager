@@ -1,0 +1,31 @@
+{% extends "notifications/emails/base_email.txt" %}
+
+{% block content %}
+TASK HAS BEEN CANCELLED
+================================================================================
+
+Hello {{ assignee_name }},
+
+We wanted to let you know that the following task assigned to you has been 
+cancelled by {{ cancelled_by_name }}:
+
+TASK DETAILS
+--------------------------------------------------------------------------------
+
+Title: {{ task.title }}
+Reference: {{ task.reference_number }}
+Cancelled by: {{ cancelled_by_name }}
+Cancelled at: {{ cancelled_at_formatted }}
+Status: Cancelled
+
+--------------------------------------------------------------------------------
+
+REASON FOR CANCELLATION:
+{{ reason }}
+
+--------------------------------------------------------------------------------
+
+View this task: {{ task_url }}
+
+No further action is required on this task.
+{% endblock %}

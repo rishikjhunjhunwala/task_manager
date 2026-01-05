@@ -1,0 +1,54 @@
+{% extends "notifications/emails/base_email.html" %}
+
+{% block title %}Task Cancelled - {{ task.reference_number }}{% endblock %}
+
+{% block content %}
+<h2>Task Has Been Cancelled</h2>
+
+<p>Hello {{ assignee_name }},</p>
+
+<p>We wanted to let you know that the following task assigned to you has been cancelled by <strong>{{ cancelled_by_name }}</strong>:</p>
+
+<div class="task-details">
+    <h3 style="margin: 0 0 16px 0; color: #1e3a5f; font-size: 18px;">{{ task.title }}</h3>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 0;">
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; width: 130px;">Reference:</td>
+            <td style="padding: 8px 0; color: #1e293b; font-weight: 500;">{{ task.reference_number }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Cancelled by:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ cancelled_by_name }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Cancelled at:</td>
+            <td style="padding: 8px 0; color: #1e293b; font-weight: 500;">{{ cancelled_at_formatted }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Status:</td>
+            <td style="padding: 8px 0;">
+                <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #ffffff; background-color: #6b7280;">
+                    Cancelled
+                </span>
+            </td>
+        </tr>
+    </table>
+</div>
+
+<!-- Cancellation reason box - prominently displayed -->
+<div style="background-color: #fef2f2; border-left: 4px solid #ef4444; border-radius: 4px; padding: 16px; margin: 24px 0;">
+    <p style="margin: 0 0 8px 0; color: #991b1b; font-size: 14px; font-weight: 600;">
+        Reason for Cancellation:
+    </p>
+    <p style="margin: 0; color: #7f1d1d; font-size: 14px; white-space: pre-wrap;">{{ reason }}</p>
+</div>
+
+<div class="button-container">
+    <a href="{{ task_url }}" class="button" style="background-color: #6b7280;">View Task Details</a>
+</div>
+
+<p style="color: #64748b; font-size: 14px;">
+    Click the button above to view the task details. No further action is required on this task.
+</p>
+{% endblock %}

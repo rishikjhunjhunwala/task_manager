@@ -3,20 +3,12 @@ Notification Services for Task Manager.
 
 Phase 9A: Core email sending functionality with HTML and plain text support.
 Phase 9B: Task assignment and completion notification functions.
+Phase 9C: Task status change notifications (verified, cancelled, reassigned).
 
 This module provides the central email sending functionality for all
 notification types in the application. All email notifications should
 use the send_notification_email() function for consistency.
-
-Usage:
-    from apps.notifications.services import send_notification_email
-    
-    result = send_notification_email(
-        to_email='user@example.com',
-        subject='Task Assigned',
-        template_name='task_assigned',
-        context={'task': task_instance}
-    )
+...
 """
 
 import logging
@@ -135,7 +127,6 @@ def send_notification_email(
         email = EmailMultiAlternatives(
             subject=formatted_subject,
             body=text_content,  # Plain text body (fallback)
-            from_email=sender_email,
             to=[to_email],
         )
         
@@ -517,17 +508,364 @@ def notify_task_completed(task) -> bool:
     
     return result
 
+# =============================================================================
+# Task Status Change Notification Functions (Phase 9C)
+# =============================================================================
+
+def notify_task_verified(task) -> bool:
+    """
+    Send confirmation to assignee when task is verified by creator.
+    
+    This function notifies the assignee that the task creator has reviewed
+    and verified their completed work. This closes the task lifecycle.
+    
+    Rules:
+    - Only sends for DELEGATED tasks (personal tasks skip verification)
+    - Recipient is the task assignee (who did the work)
+    - Sender is the default system email
+    
+    Args:
+        task: Task model instance with the following attributes:
+            - task_type: 'personal' or 'delegated'
+            - assignee: User who completed the task
+            - created_by: User who verified the task
+            - title: Task title
+            - reference_number: Unique task reference
+            - verified_at: Timestamp when verified (optional)
+    
+    Returns:
+        bool: True if email was sent successfully, False otherwise
+              Returns False without error if task is personal (expected behavior)
+    
+    Example:
+        >>> from apps.tasks.models import Task
+        >>> from apps.notifications.services import notify_task_verified
+        >>> task = Task.objects.filter(status='verified', task_type='delegated').first()
+        >>> notify_task_verified(task)
+        True
+    """
+    # Rule: Only send for DELEGATED tasks
+    # Personal tasks don't go through verification workflow
+    if task.task_type != 'delegated':
+        logger.debug(
+            f"Skipping verification notification for personal task: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Double-check: Skip if assignee is the same as creator
+    if task.assignee_id == task.created_by_id:
+        logger.debug(
+            f"Skipping verification notification - assignee is creator: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Validate that we have required user information
+    if not task.assignee or not task.assignee.email:
+        logger.error(
+            f"Cannot send verification notification - assignee has no email: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    if not task.created_by:
+        logger.error(
+            f"Cannot send verification notification - creator is missing: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Build task URL
+    task_url = get_task_url(task)
+    
+    # Format verification timestamp
+    # Use verified_at if available, otherwise use current time
+    verified_at = getattr(task, 'verified_at', None) or timezone.now()
+    verified_at_formatted = format_datetime_for_email(verified_at)
+    
+    # Build template context
+    context = {
+        'task': task,
+        'task_url': task_url,
+        'assignee': task.assignee,
+        'assignee_name': get_user_display_name(task.assignee),
+        'verified_by': task.created_by,
+        'verified_by_name': get_user_display_name(task.created_by),
+        'verified_at_formatted': verified_at_formatted,
+    }
+    
+    # Build subject line
+    subject = f"[Task Verified] {task.title} - {task.reference_number}"
+    
+    # Send the email
+    # Sender is the default system email (per user's edit request)
+    result = send_notification_email(
+        to_email=task.assignee.email,
+        subject=subject,
+        template_name='task_verified',
+        context=context,
+        # from_email not passed - will use DEFAULT_FROM_EMAIL
+    )
+    
+    if result:
+        logger.info(
+            f"Task verification notification sent: "
+            f"task={task.reference_number}, to={task.assignee.email}"
+        )
+    else:
+        logger.warning(
+            f"Failed to send task verification notification: "
+            f"task={task.reference_number}, to={task.assignee.email}"
+        )
+    
+    return result
+
+
+def notify_task_cancelled(task, reason: str, cancelled_by) -> bool:
+    """
+    Send cancellation notice to assignee with reason.
+    
+    This function notifies the assignee that their assigned task has been
+    cancelled and provides the reason for cancellation.
+    
+    Rules:
+    - Send to assignee (they need to know task is cancelled)
+    - Reason is required (no empty cancellations allowed)
+    - Sender is the default system email
+    - Recipient is the task assignee
+    
+    Args:
+        task: Task model instance with the following attributes:
+            - assignee: User assigned to the task
+            - title: Task title
+            - reference_number: Unique task reference
+        reason: Cancellation reason string (required, non-empty)
+        cancelled_by: User who cancelled the task
+    
+    Returns:
+        bool: True if email was sent successfully, False otherwise
+              Returns False if reason is empty or assignee has no email
+    
+    Example:
+        >>> from apps.tasks.models import Task
+        >>> from apps.accounts.models import User
+        >>> from apps.notifications.services import notify_task_cancelled
+        >>> task = Task.objects.filter(task_type='delegated').first()
+        >>> admin = User.objects.filter(role='admin').first()
+        >>> notify_task_cancelled(task, "Project requirements changed", admin)
+        True
+    """
+    # Validate reason is provided
+    if not reason or not reason.strip():
+        logger.error(
+            f"Cannot send cancellation notification - reason is empty: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Validate cancelled_by user
+    if not cancelled_by:
+        logger.error(
+            f"Cannot send cancellation notification - cancelled_by is missing: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Validate assignee exists and has email
+    if not task.assignee or not task.assignee.email:
+        logger.error(
+            f"Cannot send cancellation notification - assignee has no email: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Skip notification if assignee is the one cancelling (they already know)
+    if task.assignee_id == cancelled_by.pk:
+        logger.debug(
+            f"Skipping cancellation notification - assignee cancelled own task: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Build task URL
+    task_url = get_task_url(task)
+    
+    # Get current timestamp for cancellation
+    cancelled_at_formatted = format_datetime_for_email(timezone.now())
+    
+    # Build template context
+    context = {
+        'task': task,
+        'task_url': task_url,
+        'assignee': task.assignee,
+        'assignee_name': get_user_display_name(task.assignee),
+        'cancelled_by': cancelled_by,
+        'cancelled_by_name': get_user_display_name(cancelled_by),
+        'reason': reason.strip(),
+        'cancelled_at_formatted': cancelled_at_formatted,
+    }
+    
+    # Build subject line
+    subject = f"[Task Cancelled] {task.title} - {task.reference_number}"
+    
+    # Send the email
+    # Sender is the default system email (per user's edit request)
+    result = send_notification_email(
+        to_email=task.assignee.email,
+        subject=subject,
+        template_name='task_cancelled',
+        context=context,
+        # from_email not passed - will use DEFAULT_FROM_EMAIL
+    )
+    
+    if result:
+        logger.info(
+            f"Task cancellation notification sent: "
+            f"task={task.reference_number}, to={task.assignee.email}, "
+            f"reason='{reason[:50]}...'" if len(reason) > 50 else f"reason='{reason}'"
+        )
+    else:
+        logger.warning(
+            f"Failed to send task cancellation notification: "
+            f"task={task.reference_number}, to={task.assignee.email}"
+        )
+    
+    return result
+
+
+def notify_task_reassigned(task, new_assignee, reassigned_by) -> bool:
+    """
+    Send notification to NEW assignee only when task is reassigned.
+    
+    CRITICAL RULE: Old assignee receives NO notification on reassignment.
+    This is explicitly stated in the requirements.
+    
+    Rules:
+    - Only notify the NEW assignee
+    - Old assignee receives NO notification (per requirements)
+    - Sender is the default system email
+    - Recipient is the new assignee's email
+    - Deadline does NOT reset on reassignment
+    
+    Args:
+        task: Task model instance (should already be updated with new assignee)
+            - title: Task title
+            - reference_number: Unique task reference
+            - description: Task description
+            - priority: Priority level
+            - deadline: Due date/time (unchanged by reassignment)
+        new_assignee: User model instance - the user now assigned to the task
+        reassigned_by: User model instance - the user who performed reassignment
+    
+    Returns:
+        bool: True if email was sent successfully, False otherwise
+              Returns False if new_assignee has no email
+    
+    Example:
+        >>> from apps.tasks.models import Task
+        >>> from apps.accounts.models import User
+        >>> from apps.notifications.services import notify_task_reassigned
+        >>> task = Task.objects.filter(task_type='delegated').first()
+        >>> new_assignee = User.objects.exclude(pk=task.assignee.pk).first()
+        >>> notify_task_reassigned(task, new_assignee, task.created_by)
+        True
+    
+    Note:
+        The old assignee is intentionally NOT notified. If business requirements
+        change in the future, a separate notify_task_unassigned() function
+        should be created rather than modifying this function.
+    """
+    # Validate new_assignee exists and has email
+    if not new_assignee or not new_assignee.email:
+        logger.error(
+            f"Cannot send reassignment notification - new_assignee has no email: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Validate reassigned_by user
+    if not reassigned_by:
+        logger.error(
+            f"Cannot send reassignment notification - reassigned_by is missing: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Skip notification if new assignee is the one reassigning to themselves
+    if new_assignee.pk == reassigned_by.pk:
+        logger.debug(
+            f"Skipping reassignment notification - user assigned to self: "
+            f"{task.reference_number}"
+        )
+        return False
+    
+    # Build task URL
+    task_url = get_task_url(task)
+    
+    # Format deadline for display (deadline does NOT reset on reassignment)
+    deadline_formatted = format_datetime_for_email(task.deadline)
+    
+    # Get priority display info
+    priority_info = get_priority_display(task.priority)
+    
+    # Get reassigned_by user's department (if available)
+    reassigned_by_department = ''
+    if hasattr(reassigned_by, 'department') and reassigned_by.department:
+        reassigned_by_department = reassigned_by.department.name
+    
+    # Truncate description if too long (keep first 500 chars)
+    description_truncated = task.description
+    if len(task.description) > 500:
+        description_truncated = task.description[:497] + '...'
+    
+    # Build template context
+    context = {
+        'task': task,
+        'task_url': task_url,
+        'new_assignee': new_assignee,
+        'new_assignee_name': get_user_display_name(new_assignee),
+        'reassigned_by': reassigned_by,
+        'reassigned_by_name': get_user_display_name(reassigned_by),
+        'reassigned_by_department': reassigned_by_department,
+        'deadline_formatted': deadline_formatted,
+        'priority_info': priority_info,
+        'description_truncated': description_truncated,
+        'has_deadline': task.deadline is not None,
+    }
+    
+    # Build subject line
+    # Use "Task Assigned to You" to make it clear this is actionable
+    subject = f"[Task Assigned to You] {task.title} - {task.reference_number}"
+    
+    # Send the email
+    # Sender is the default system email (per user's edit request)
+    result = send_notification_email(
+        to_email=new_assignee.email,
+        subject=subject,
+        template_name='task_reassigned',
+        context=context,
+        # from_email not passed - will use DEFAULT_FROM_EMAIL
+    )
+    
+    if result:
+        logger.info(
+            f"Task reassignment notification sent: "
+            f"task={task.reference_number}, to={new_assignee.email}"
+        )
+    else:
+        logger.warning(
+            f"Failed to send task reassignment notification: "
+            f"task={task.reference_number}, to={new_assignee.email}"
+        )
+    
+    return result
 
 # =============================================================================
 # Notification Functions Placeholder (Future Phases)
 # =============================================================================
-# The following notification functions will be implemented in Phase 9C/9D:
 #
-# Phase 9C:
-# - notify_task_verified(task) -> Notify assignee when task verified
-# - notify_task_cancelled(task, reason) -> Notify assignee of cancellation
-# - notify_task_reassigned(task, old_assignee) -> Notify new assignee only
-#
+
 # Phase 9D:
 # - notify_deadline_reminder(task) -> 24-hour deadline warning
 # - notify_overdue(task) -> Daily overdue reminder

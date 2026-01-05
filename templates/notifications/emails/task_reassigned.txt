@@ -1,0 +1,33 @@
+{% extends "notifications/emails/base_email.txt" %}
+
+{% block content %}
+A TASK HAS BEEN ASSIGNED TO YOU
+================================================================================
+
+Hello {{ new_assignee_name }},
+
+A task has been reassigned to you by {{ reassigned_by_name }}{% if reassigned_by_department %} ({{ reassigned_by_department }}){% endif %}. Please review the details below:
+
+TASK DETAILS
+--------------------------------------------------------------------------------
+
+Title: {{ task.title }}
+Reference: {{ task.reference_number }}
+Priority: {{ priority_info.name }}
+Deadline: {{ deadline_formatted }}
+Reassigned by: {{ reassigned_by_name }}
+
+{% if description_truncated %}
+Description:
+{{ description_truncated }}
+
+{% endif %}
+--------------------------------------------------------------------------------
+
+NOTE: This task has been reassigned to you. Please review the task details 
+and deadline, then proceed with the work.
+
+View this task: {{ task_url }}
+
+Click the link above to view the full task details and get started.
+{% endblock %}
