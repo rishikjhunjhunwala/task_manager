@@ -1359,3 +1359,143 @@ def notify_escalation_sm1(task) -> bool:
     )
     
     return any_sent
+
+"""
+Phase 10D Addition: Daily Dashboard Email Service
+
+Add this function to the END of your existing apps/notifications/services.py file.
+
+This function sends personalized daily dashboard emails to users showing
+their task summary.
+"""
+
+# ============================================================================
+# PHASE 10D: Daily Dashboard Email
+# ============================================================================
+
+def send_dashboard_email(user, assigned_tasks, created_tasks):
+    """
+    Send a daily dashboard summary email to a user.
+    
+    This function compiles a personalized summary of all pending/in-progress
+    tasks for the user, including both tasks assigned to them and tasks
+    they've assigned to others.
+    
+    Args:
+        user: User object - the recipient of the email
+        assigned_tasks: QuerySet of Task objects assigned to this user
+        created_tasks: QuerySet of Task objects created by this user for others
+    
+    Returns:
+        bool: True if email was sent successfully, False otherwise
+    
+    Context Variables for Template:
+        - user: The recipient user object
+        - assigned_tasks: QuerySet of tasks assigned to user
+        - created_tasks: QuerySet of tasks user created for others
+        - assigned_count: Total count of assigned tasks
+        - assigned_overdue_count: Count of overdue tasks in assigned
+        - created_count: Total count of created tasks
+        - created_overdue_count: Count of overdue tasks in created
+        - status_counts: Dict with pending/in_progress counts
+        - dashboard_url: Direct link to the app dashboard
+        - today: Current date for greeting
+        - now: Current datetime for timestamp
+    
+    Example:
+        >>> from apps.notifications.services import send_dashboard_email
+        >>> from apps.accounts.models import User
+        >>> from apps.tasks.models import Task
+        >>> 
+        >>> user = User.objects.get(email='john@example.com')
+        >>> assigned = Task.objects.filter(assignee=user, status='pending')
+        >>> created = Task.objects.filter(created_by=user).exclude(assignee=user)
+        >>> send_dashboard_email(user, assigned, created)
+        True
+    """
+    from django.conf import settings
+    from django.utils import timezone
+    
+    now = timezone.now()
+    today = now.date()
+    
+    # --- Calculate counts ---
+    assigned_count = assigned_tasks.count()
+    created_count = created_tasks.count()
+    
+    # --- Calculate overdue counts ---
+    assigned_overdue_count = sum(
+        1 for task in assigned_tasks 
+        if task.deadline and task.deadline < now
+    )
+    created_overdue_count = sum(
+        1 for task in created_tasks 
+        if task.deadline and task.deadline < now
+    )
+    
+    # --- Calculate status breakdown ---
+    # Combine both querysets for overall status counts
+    all_pending = (
+        assigned_tasks.filter(status='pending').count() +
+        created_tasks.filter(status='pending').count()
+    )
+    all_in_progress = (
+        assigned_tasks.filter(status='in_progress').count() +
+        created_tasks.filter(status='in_progress').count()
+    )
+    
+    status_counts = {
+        'pending': all_pending,
+        'in_progress': all_in_progress,
+    }
+    
+    # --- Build dashboard URL ---
+    # Use APP_URL from settings, fallback to SITE_URL, then localhost
+    base_url = getattr(settings, 'APP_URL', None)
+    if not base_url:
+        base_url = getattr(settings, 'SITE_URL', 'http://localhost:8000')
+    
+    dashboard_url = f"{base_url.rstrip('/')}/tasks/dashboard/"
+    
+    # --- Format today's date for subject line ---
+    date_str = today.strftime('%B %d, %Y')  # e.g., "January 06, 2026"
+    
+    # --- Build context ---
+    context = {
+        'user': user,
+        'assigned_tasks': assigned_tasks,
+        'created_tasks': created_tasks,
+        'assigned_count': assigned_count,
+        'assigned_overdue_count': assigned_overdue_count,
+        'created_count': created_count,
+        'created_overdue_count': created_overdue_count,
+        'status_counts': status_counts,
+        'dashboard_url': dashboard_url,
+        'today': today,
+        'now': now,
+        'date_str': date_str,
+    }
+    
+    # --- Build subject line ---
+    subject = f"[Daily Summary] Your Task Dashboard - {date_str}"
+    
+    # --- Send email using core function ---
+    try:
+        result = send_notification_email(
+            to_email=user.email,
+            subject=subject,
+            template_name='daily_dashboard',
+            context=context,
+            # from_email omitted - uses DEFAULT_FROM_EMAIL from settings
+        )
+        
+        if result:
+            logger.info(f"Dashboard email sent to {user.email}")
+        else:
+            logger.warning(f"Dashboard email failed for {user.email}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error sending dashboard email to {user.email}: {e}")
+        return False
