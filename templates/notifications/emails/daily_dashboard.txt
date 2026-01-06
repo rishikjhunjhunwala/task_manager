@@ -1,0 +1,50 @@
+{% extends "notifications/emails/base_email.txt" %}
+
+{% block content %}
+Good morning, {{ user.first_name|default:user.email }}!
+
+Here's your daily task summary for {{ date_str }}.
+
+================================================================================
+STATUS BREAKDOWN
+================================================================================
+
+Pending: {{ status_counts.pending }}
+In Progress: {{ status_counts.in_progress }}
+
+{% if assigned_count > 0 %}
+================================================================================
+📥 TASKS ASSIGNED TO YOU ({{ assigned_count }} total{% if assigned_overdue_count > 0 %}, {{ assigned_overdue_count }} overdue{% endif %})
+================================================================================
+
+{% for task in assigned_tasks %}
+{% if task.deadline and task.deadline < now %}[OVERDUE] {% endif %}{{ task.reference_number }} - {{ task.title|truncatechars:50 }}
+  Priority: {{ task.get_priority_display }}  |  Status: {{ task.get_status_display }}
+  {% if task.deadline %}Due: {{ task.deadline|date:"M j, Y" }}{% else %}No deadline{% endif %}
+
+{% endfor %}
+{% endif %}
+{% if created_count > 0 %}
+================================================================================
+📤 TASKS YOU ASSIGNED ({{ created_count }} total{% if created_overdue_count > 0 %}, {{ created_overdue_count }} overdue{% endif %})
+================================================================================
+
+{% for task in created_tasks %}
+{% if task.deadline and task.deadline < now %}[OVERDUE] {% endif %}{{ task.reference_number }} - {{ task.title|truncatechars:50 }}
+  Assigned to: {{ task.assignee.get_full_name|default:task.assignee.email }}
+  Priority: {{ task.get_priority_display }}  |  Status: {{ task.get_status_display }}
+  {% if task.deadline %}Due: {{ task.deadline|date:"M j, Y" }}{% else %}No deadline{% endif %}
+
+{% endfor %}
+{% endif %}
+================================================================================
+VIEW YOUR DASHBOARD
+================================================================================
+
+Manage all your tasks in one place:
+{{ dashboard_url }}
+
+--------------------------------------------------------------------------------
+TIP: Complete your high-priority and overdue tasks first to stay on track.
+This is an automated daily summary sent at 8:00 AM IST.
+{% endblock %}

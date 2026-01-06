@@ -1,0 +1,245 @@
+{% extends "notifications/emails/base_email.html" %}
+
+{% block title %}Daily Task Dashboard{% endblock %}
+
+{% block preheader %}Your daily task summary: {{ assigned_count }} assigned, {{ created_count }} delegated tasks{% endblock %}
+
+{% block content %}
+<!-- Greeting Section -->
+<tr>
+    <td style="padding: 30px 40px 20px 40px;">
+        <h1 style="margin: 0 0 10px 0; font-size: 24px; font-weight: 600; color: #1a1a2e;">
+            Good morning, {{ user.first_name|default:user.email }}!
+        </h1>
+        <p style="margin: 0; font-size: 16px; color: #4a5568; line-height: 1.6;">
+            Here's your daily task summary for <strong>{{ date_str }}</strong>.
+        </p>
+    </td>
+</tr>
+
+<!-- Quick Stats Bar -->
+<tr>
+    <td style="padding: 0 40px 30px 40px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-radius: 8px; overflow: hidden;">
+            <tr>
+                <!-- Pending Count -->
+                <td width="50%" style="background-color: #fef3c7; padding: 15px; text-align: center; border-right: 2px solid #ffffff;">
+                    <div style="font-size: 28px; font-weight: 700; color: #92400e;">{{ status_counts.pending }}</div>
+                    <div style="font-size: 12px; font-weight: 600; color: #b45309; text-transform: uppercase; letter-spacing: 0.5px;">Pending</div>
+                </td>
+                <!-- In Progress Count -->
+                <td width="50%" style="background-color: #dbeafe; padding: 15px; text-align: center;">
+                    <div style="font-size: 28px; font-weight: 700; color: #1e40af;">{{ status_counts.in_progress }}</div>
+                    <div style="font-size: 12px; font-weight: 600; color: #1d4ed8; text-transform: uppercase; letter-spacing: 0.5px;">In Progress</div>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+
+{% if assigned_count > 0 %}
+<!-- Tasks Assigned TO You Section -->
+<tr>
+    <td style="padding: 0 40px 25px 40px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <!-- Section Header -->
+            <tr>
+                <td style="padding: 20px 20px 15px 20px; border-bottom: 1px solid #e2e8f0;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                            <td>
+                                <span style="font-size: 18px; margin-right: 8px;">📥</span>
+                                <span style="font-size: 16px; font-weight: 600; color: #1a1a2e;">TASKS ASSIGNED TO YOU</span>
+                            </td>
+                            <td style="text-align: right;">
+                                <span style="display: inline-block; background-color: {% if assigned_overdue_count > 0 %}#fef2f2{% else %}#ecfdf5{% endif %}; color: {% if assigned_overdue_count > 0 %}#dc2626{% else %}#059669{% endif %}; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
+                                    {{ assigned_count }} total{% if assigned_overdue_count > 0 %}, {{ assigned_overdue_count }} overdue{% endif %}
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            
+            <!-- Task List -->
+            {% for task in assigned_tasks %}
+            <tr>
+                <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0;">
+                    <!-- Task Row -->
+                    <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                            <td>
+                                <!-- Overdue indicator -->
+                                {% if task.deadline and task.deadline < now %}
+                                <span style="display: inline-block; background-color: #dc2626; color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; margin-right: 8px; text-transform: uppercase;">OVERDUE</span>
+                                {% endif %}
+                                
+                                <!-- Task Reference -->
+                                <span style="font-family: monospace; font-size: 12px; color: #6b7280;">{{ task.reference_number }}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding-top: 5px;">
+                                <!-- Task Title -->
+                                <span style="font-size: 14px; font-weight: 500; color: #1f2937;">{{ task.title|truncatechars:60 }}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding-top: 8px;">
+                                <!-- Priority Badge -->
+                                <span style="display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 3px; margin-right: 10px;
+                                    {% if task.priority == 'high' %}
+                                    background-color: #fef2f2; color: #dc2626;
+                                    {% elif task.priority == 'medium' %}
+                                    background-color: #fffbeb; color: #d97706;
+                                    {% else %}
+                                    background-color: #f0fdf4; color: #16a34a;
+                                    {% endif %}
+                                ">{{ task.get_priority_display|upper }}</span>
+                                
+                                <!-- Status Badge -->
+                                <span style="display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 3px; margin-right: 10px;
+                                    {% if task.status == 'pending' %}
+                                    background-color: #fef3c7; color: #92400e;
+                                    {% else %}
+                                    background-color: #dbeafe; color: #1e40af;
+                                    {% endif %}
+                                ">{{ task.get_status_display }}</span>
+                                
+                                <!-- Deadline -->
+                                {% if task.deadline %}
+                                <span style="font-size: 12px; color: {% if task.deadline < now %}#dc2626{% else %}#6b7280{% endif %};">
+                                    Due: {{ task.deadline|date:"M j, Y" }}
+                                </span>
+                                {% else %}
+                                <span style="font-size: 12px; color: #9ca3af;">No deadline</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </td>
+</tr>
+{% endif %}
+
+{% if created_count > 0 %}
+<!-- Tasks You Assigned Section -->
+<tr>
+    <td style="padding: 0 40px 25px 40px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <!-- Section Header -->
+            <tr>
+                <td style="padding: 20px 20px 15px 20px; border-bottom: 1px solid #e2e8f0;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                            <td>
+                                <span style="font-size: 18px; margin-right: 8px;">📤</span>
+                                <span style="font-size: 16px; font-weight: 600; color: #1a1a2e;">TASKS YOU ASSIGNED</span>
+                            </td>
+                            <td style="text-align: right;">
+                                <span style="display: inline-block; background-color: {% if created_overdue_count > 0 %}#fef2f2{% else %}#ecfdf5{% endif %}; color: {% if created_overdue_count > 0 %}#dc2626{% else %}#059669{% endif %}; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px;">
+                                    {{ created_count }} total{% if created_overdue_count > 0 %}, {{ created_overdue_count }} overdue{% endif %}
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            
+            <!-- Task List -->
+            {% for task in created_tasks %}
+            <tr>
+                <td style="padding: 15px 20px; border-bottom: 1px solid #e2e8f0;">
+                    <!-- Task Row -->
+                    <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                            <td>
+                                <!-- Overdue indicator -->
+                                {% if task.deadline and task.deadline < now %}
+                                <span style="display: inline-block; background-color: #dc2626; color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; margin-right: 8px; text-transform: uppercase;">OVERDUE</span>
+                                {% endif %}
+                                
+                                <!-- Task Reference -->
+                                <span style="font-family: monospace; font-size: 12px; color: #6b7280;">{{ task.reference_number }}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding-top: 5px;">
+                                <!-- Task Title -->
+                                <span style="font-size: 14px; font-weight: 500; color: #1f2937;">{{ task.title|truncatechars:60 }}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding-top: 8px;">
+                                <!-- Assignee -->
+                                <span style="display: inline-block; font-size: 11px; color: #6b7280; margin-right: 10px;">
+                                    👤 {{ task.assignee.get_full_name|default:task.assignee.email }}
+                                </span>
+                                
+                                <!-- Priority Badge -->
+                                <span style="display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 3px; margin-right: 10px;
+                                    {% if task.priority == 'high' %}
+                                    background-color: #fef2f2; color: #dc2626;
+                                    {% elif task.priority == 'medium' %}
+                                    background-color: #fffbeb; color: #d97706;
+                                    {% else %}
+                                    background-color: #f0fdf4; color: #16a34a;
+                                    {% endif %}
+                                ">{{ task.get_priority_display|upper }}</span>
+                                
+                                <!-- Deadline -->
+                                {% if task.deadline %}
+                                <span style="font-size: 12px; color: {% if task.deadline < now %}#dc2626{% else %}#6b7280{% endif %};">
+                                    Due: {{ task.deadline|date:"M j, Y" }}
+                                </span>
+                                {% else %}
+                                <span style="font-size: 12px; color: #9ca3af;">No deadline</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </td>
+</tr>
+{% endif %}
+
+<!-- Call to Action Button -->
+<tr>
+    <td style="padding: 10px 40px 30px 40px; text-align: center;">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
+            <tr>
+                <td style="background-color: #3b82f6; border-radius: 6px;">
+                    <a href="{{ dashboard_url }}" target="_blank" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none;">
+                        View Your Dashboard →
+                    </a>
+                </td>
+            </tr>
+        </table>
+        <p style="margin: 15px 0 0 0; font-size: 12px; color: #9ca3af;">
+            Manage all your tasks in one place
+        </p>
+    </td>
+</tr>
+
+<!-- Footer Note -->
+<tr>
+    <td style="padding: 0 40px 30px 40px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f1f5f9; border-radius: 6px; padding: 15px;">
+            <tr>
+                <td style="padding: 15px; text-align: center;">
+                    <p style="margin: 0; font-size: 13px; color: #64748b; line-height: 1.5;">
+                        💡 <strong>Tip:</strong> Complete your high-priority and overdue tasks first to stay on track.
+                        <br>This is an automated daily summary sent at 8:00 AM IST.
+                    </p>
+                </td>
+            </tr>
+        </table>
+    </td>
+</tr>
+{% endblock %}

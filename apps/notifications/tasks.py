@@ -1,16 +1,20 @@
 """
-Scheduled Tasks for Task Manager Notifications.
+Scheduled Tasks for Notifications.
 
-This module contains all scheduled task functions that are executed by
-Django-Q2. These functions are designed to be idempotent and logged
-for debugging and audit purposes.
+This module contains all scheduled/background tasks for the notification system.
+These functions are designed to be called by Django-Q2 on a schedule.
 
-Phase 10B: check_deadline_reminders - Hourly deadline reminders
-Phase 10C: check_overdue_tasks - Daily overdue reminders + escalation
+Phase 10B: check_deadline_reminders() - Hourly check for 24-hour deadline reminders
+Phase 10C: check_overdue_tasks() - Daily overdue reminders and escalation logic
+Phase 10D: send_daily_dashboard_emails() - Daily dashboard summary for all users
 
-Schedule Configuration:
-- Deadline reminders: Hourly (checks for tasks due in 23-25 hours)
-- Overdue check: Daily at 9:00 AM IST (sends reminders + escalates)
+Usage (Django-Q2):
+    These functions are scheduled via management command in Phase 10E.
+    For manual testing, use Django shell:
+    
+    >>> from apps.notifications.tasks import send_daily_dashboard_emails
+    >>> stats = send_daily_dashboard_emails()
+    >>> print(stats)
 """
 
 import logging
@@ -18,271 +22,205 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from apps.accounts.models import User
 from apps.tasks.models import Task
 from apps.notifications.services import (
     notify_deadline_reminder,
     notify_overdue,
     notify_escalation_sm2,
     notify_escalation_sm1,
+    send_dashboard_email,
 )
 
-# Configure logger for scheduled tasks
+# Logger for scheduled task activities
 logger = logging.getLogger(__name__)
 
 
 def check_deadline_reminders():
     """
-    Scheduled job to send deadline reminders for tasks due in ~24 hours.
+    Check for tasks with deadlines approaching in 23-25 hours and send reminders.
     
-    This function runs hourly and checks for tasks with deadlines
-    in the 23-25 hour window. It sends reminders and marks tasks
-    to prevent duplicate notifications.
+    This function is designed to run hourly. The 23-25 hour window ensures
+    that tasks due "tomorrow" are caught even with slight timing variations
+    in when the job runs.
     
     Business Rules:
-    - Only tasks in 'pending' or 'in_progress' status
-    - Only tasks with deadlines set
-    - Only sends if deadline_reminder_sent is False
-    - Marks deadline_reminder_sent = True after sending
+        - Only pending/in_progress tasks are checked
+        - Only tasks with a deadline are checked
+        - Each task only gets ONE reminder (deadline_reminder_sent flag)
+        - Time is calculated in IST (via timezone.now())
     
     Returns:
-        int: Number of reminders successfully sent
+        int: Count of reminders successfully sent
+    
+    Example:
+        >>> from apps.notifications.tasks import check_deadline_reminders
+        >>> count = check_deadline_reminders()
+        >>> print(f"Sent {count} reminder(s)")
     """
     now = timezone.now()
     
-    # Define the 23-25 hour window for upcoming deadlines
+    # Define the time window: 23-25 hours from now
     window_start = now + timedelta(hours=23)
     window_end = now + timedelta(hours=25)
     
     logger.info(
-        f"Starting deadline reminder check: "
-        f"window={window_start.isoformat()} to {window_end.isoformat()}"
+        f"Checking for deadline reminders. Window: {window_start} to {window_end}"
     )
     
-    # Query tasks that need reminders:
-    # 1. Status is 'pending' or 'in_progress' (active tasks only)
-    # 2. Deadline is set (not NULL)
-    # 3. Deadline falls within our 23-25 hour window
-    # 4. Reminder hasn't been sent yet
-    tasks_to_remind = Task.objects.filter(
+    # Query tasks that match all criteria
+    tasks = Task.objects.filter(
         status__in=['pending', 'in_progress'],
         deadline__isnull=False,
         deadline__gte=window_start,
         deadline__lte=window_end,
-        deadline_reminder_sent=False
+        deadline_reminder_sent=False,
     ).select_related('assignee', 'created_by')
     
-    # Track count of successful reminders
     reminders_sent = 0
-    tasks_found = tasks_to_remind.count()
     
-    logger.info(f"Found {tasks_found} tasks needing deadline reminders")
-    
-    # Process each task
-    for task in tasks_to_remind:
+    for task in tasks:
         try:
-            # Call the existing notification service function
+            # Send the reminder using existing notification service
             success = notify_deadline_reminder(task)
             
             if success:
-                # Mark as sent to prevent duplicate reminders
+                # Mark task as reminded to prevent duplicate emails
                 task.deadline_reminder_sent = True
                 task.save(update_fields=['deadline_reminder_sent'])
-                
                 reminders_sent += 1
+                
                 logger.info(
-                    f"Deadline reminder sent: task={task.reference_number}, "
-                    f"assignee={task.assignee.email if task.assignee else 'N/A'}, "
-                    f"deadline={task.deadline}"
+                    f"Deadline reminder sent for task {task.reference_number} "
+                    f"to {task.assignee.email}"
                 )
             else:
-                # notify_deadline_reminder handles its own logging for failures
                 logger.warning(
-                    f"Deadline reminder not sent (service returned False): "
-                    f"task={task.reference_number}"
+                    f"Failed to send deadline reminder for task {task.reference_number}"
                 )
                 
         except Exception as e:
-            # Log error but continue processing other tasks
             logger.error(
-                f"Error sending deadline reminder for task "
-                f"{task.reference_number}: {str(e)}",
-                exc_info=True
+                f"Error sending deadline reminder for task {task.reference_number}: {e}"
             )
     
-    logger.info(
-        f"Deadline reminder job completed: "
-        f"{reminders_sent}/{tasks_found} reminders sent successfully"
-    )
-    
+    logger.info(f"Deadline reminder check complete. Sent {reminders_sent} reminder(s)")
     return reminders_sent
 
 
 def check_overdue_tasks():
     """
-    Scheduled job to run daily at 9:00 AM IST.
+    Check for overdue tasks and send reminders/escalations as needed.
     
-    This function performs three key actions for overdue tasks:
-    1. Sends daily reminder emails to assignee AND creator
-    2. Escalates to Senior Manager 2 (all SM2 users) after 72 hours
-    3. Escalates to Senior Manager 1 (all SM1 users) after 120 hours
+    This function is designed to run daily at 9:00 AM IST. It handles:
+    1. Daily overdue reminders to assignee AND creator
+    2. 72-hour escalation to Senior Manager 2 (one-time)
+    3. 120-hour escalation to Senior Manager 1 (one-time)
     
     Business Rules:
-    - Only processes tasks in 'pending' or 'in_progress' status
-    - Only processes tasks with deadlines that are past due
-    - First overdue reminder has different tone (more urgent, explains escalation)
-    - Escalations are one-time only (tracked by timestamp fields)
-    - Reassignment does NOT reset escalation clock
-    
-    Task Fields Used:
-    - first_overdue_email_sent: Boolean, tracks if first reminder was sent
-    - escalated_to_sm2_at: DateTimeField, timestamp of 72h escalation
-    - escalated_to_sm1_at: DateTimeField, timestamp of 120h escalation
+        - Only pending/in_progress tasks are checked
+        - Overdue = deadline < now AND deadline is not NULL
+        - First reminder has different tone (explains escalation timeline)
+        - 72h escalation goes to ALL active SM2 users
+        - 120h escalation goes to ALL active SM1 users
+        - Escalations are one-time only (tracked by timestamp fields)
     
     Returns:
-        dict: Statistics with keys:
-            - reminders: Number of daily reminders sent
-            - sm2_escalations: Number of 72-hour escalations sent
-            - sm1_escalations: Number of 120-hour escalations sent
-            - tasks_processed: Total overdue tasks processed
+        dict: Statistics about what was processed:
+            - reminders: Count of overdue reminders sent
+            - sm2_escalations: Count of tasks escalated to SM2
+            - sm1_escalations: Count of tasks escalated to SM1
+    
+    Example:
+        >>> from apps.notifications.tasks import check_overdue_tasks
+        >>> stats = check_overdue_tasks()
+        >>> print(stats)
+        {'reminders': 5, 'sm2_escalations': 2, 'sm1_escalations': 1}
     """
     now = timezone.now()
     
-    logger.info(f"Starting overdue task check at {now.isoformat()}")
+    logger.info(f"Starting overdue task check at {now}")
     
-    # Initialize statistics
+    # Statistics tracking
     stats = {
         'reminders': 0,
         'sm2_escalations': 0,
         'sm1_escalations': 0,
-        'tasks_processed': 0,
     }
     
-    # Query all overdue tasks:
-    # 1. Status is 'pending' or 'in_progress' (active tasks only)
-    # 2. Deadline is set (not NULL)
-    # 3. Deadline is in the past (before now)
+    # Query all overdue tasks
     overdue_tasks = Task.objects.filter(
         status__in=['pending', 'in_progress'],
         deadline__isnull=False,
-        deadline__lt=now
-    ).select_related('assignee', 'created_by', 'department')
+        deadline__lt=now,  # Past deadline
+    ).select_related('assignee', 'created_by')
     
-    tasks_found = overdue_tasks.count()
-    logger.info(f"Found {tasks_found} overdue tasks to process")
+    logger.info(f"Found {overdue_tasks.count()} overdue task(s)")
     
-    # Process each overdue task
     for task in overdue_tasks:
         try:
-            stats['tasks_processed'] += 1
-            
-            # Calculate how many hours the task has been overdue
-            time_overdue = now - task.deadline
-            hours_overdue = time_overdue.total_seconds() / 3600
+            # Calculate hours overdue
+            hours_overdue = (now - task.deadline).total_seconds() / 3600
             
             logger.debug(
-                f"Processing overdue task: {task.reference_number}, "
-                f"hours_overdue={hours_overdue:.1f}, "
-                f"first_email_sent={task.first_overdue_email_sent}, "
-                f"sm2_escalated={task.escalated_to_sm2_at is not None}, "
-                f"sm1_escalated={task.escalated_to_sm1_at is not None}"
+                f"Task {task.reference_number}: {hours_overdue:.1f} hours overdue"
             )
             
-            # ------------------------------------------------------------------
-            # Step 1: Send daily overdue reminder to assignee + creator
-            # ------------------------------------------------------------------
-            # Determine if this is the first overdue reminder
+            # --- Daily Overdue Reminder ---
             is_first_reminder = not task.first_overdue_email_sent
             
-            # Send the overdue reminder (goes to both assignee AND creator)
-            reminder_sent = notify_overdue(task, is_first_reminder=is_first_reminder)
+            success = notify_overdue(task, is_first_reminder=is_first_reminder)
             
-            if reminder_sent:
+            if success:
                 stats['reminders'] += 1
-                logger.info(
-                    f"Overdue reminder sent: task={task.reference_number}, "
-                    f"is_first={is_first_reminder}, hours_overdue={hours_overdue:.1f}"
-                )
                 
-                # Mark first overdue email as sent (if it was the first)
+                # Mark first reminder as sent
                 if is_first_reminder:
                     task.first_overdue_email_sent = True
                     task.save(update_fields=['first_overdue_email_sent'])
-                    logger.debug(
-                        f"Marked first_overdue_email_sent=True for "
-                        f"{task.reference_number}"
-                    )
-            else:
-                logger.warning(
-                    f"Overdue reminder not sent (service returned False): "
-                    f"task={task.reference_number}"
+                
+                logger.info(
+                    f"Overdue reminder sent for task {task.reference_number} "
+                    f"({'first' if is_first_reminder else 'follow-up'})"
                 )
             
-            # ------------------------------------------------------------------
-            # Step 2: 72-hour escalation to Senior Manager 2
-            # ------------------------------------------------------------------
-            # Only escalate if:
-            # - Task has been overdue for >= 72 hours
-            # - Not already escalated to SM2 (escalated_to_sm2_at is NULL)
+            # --- 72-Hour Escalation to SM2 ---
             if hours_overdue >= 72 and task.escalated_to_sm2_at is None:
-                escalation_sent = notify_escalation_sm2(task)
+                escalation_success = notify_escalation_sm2(task)
                 
-                if escalation_sent:
-                    stats['sm2_escalations'] += 1
-                    
-                    # Record the escalation timestamp
+                if escalation_success:
                     task.escalated_to_sm2_at = now
                     task.save(update_fields=['escalated_to_sm2_at'])
+                    stats['sm2_escalations'] += 1
                     
-                    logger.info(
-                        f"72-hour escalation to SM2 sent: "
-                        f"task={task.reference_number}, hours_overdue={hours_overdue:.1f}"
-                    )
-                else:
                     logger.warning(
-                        f"72-hour escalation failed (service returned False): "
-                        f"task={task.reference_number}"
+                        f"72-hour escalation triggered for task {task.reference_number} "
+                        f"- notified SM2 users"
                     )
             
-            # ------------------------------------------------------------------
-            # Step 3: 120-hour escalation to Senior Manager 1
-            # ------------------------------------------------------------------
-            # Only escalate if:
-            # - Task has been overdue for >= 120 hours
-            # - Not already escalated to SM1 (escalated_to_sm1_at is NULL)
+            # --- 120-Hour Escalation to SM1 ---
             if hours_overdue >= 120 and task.escalated_to_sm1_at is None:
-                escalation_sent = notify_escalation_sm1(task)
+                escalation_success = notify_escalation_sm1(task)
                 
-                if escalation_sent:
-                    stats['sm1_escalations'] += 1
-                    
-                    # Record the escalation timestamp
+                if escalation_success:
                     task.escalated_to_sm1_at = now
                     task.save(update_fields=['escalated_to_sm1_at'])
+                    stats['sm1_escalations'] += 1
                     
-                    logger.info(
-                        f"120-hour escalation to SM1 sent: "
-                        f"task={task.reference_number}, hours_overdue={hours_overdue:.1f}"
-                    )
-                else:
-                    logger.warning(
-                        f"120-hour escalation failed (service returned False): "
-                        f"task={task.reference_number}"
+                    logger.critical(
+                        f"120-hour CRITICAL escalation triggered for task "
+                        f"{task.reference_number} - notified SM1 users"
                     )
                     
         except Exception as e:
-            # Log error but continue processing other tasks
             logger.error(
-                f"Error processing overdue task {task.reference_number}: {str(e)}",
-                exc_info=True
+                f"Error processing overdue task {task.reference_number}: {e}"
             )
     
-    # Log final statistics
     logger.info(
-        f"Overdue task check completed: "
-        f"tasks_processed={stats['tasks_processed']}, "
-        f"reminders_sent={stats['reminders']}, "
-        f"sm2_escalations={stats['sm2_escalations']}, "
-        f"sm1_escalations={stats['sm1_escalations']}"
+        f"Overdue check complete. Stats: {stats['reminders']} reminders, "
+        f"{stats['sm2_escalations']} SM2 escalations, "
+        f"{stats['sm1_escalations']} SM1 escalations"
     )
     
     return stats
@@ -290,11 +228,96 @@ def check_overdue_tasks():
 
 def send_daily_dashboard_emails():
     """
-    Scheduled job to run daily at 8:00 AM IST.
+    Send daily dashboard summary emails to all active users with pending tasks.
     
-    Sends task snapshot email to users with pending tasks.
-    Users with no pending tasks are skipped.
+    This function is designed to run daily at 8:00 AM IST (including weekends).
+    It provides each user with a personalized summary of:
+    1. Tasks assigned TO them (pending + in_progress)
+    2. Tasks they created FOR others (pending + in_progress, assignee != creator)
     
-    Will be implemented in Phase 10D.
+    Business Rules:
+        - Only active users receive the email
+        - Users with NO pending tasks (in either category) are skipped
+        - Only pending and in_progress tasks are included
+        - Overdue tasks are highlighted with visual indicators
+        - Email includes counts, task lists, and a link to the dashboard
+    
+    Returns:
+        dict: Statistics about what was processed:
+            - emails_sent: Count of dashboard emails sent
+            - users_skipped: Count of users skipped (no tasks)
+            - users_processed: Total active users checked
+    
+    Example:
+        >>> from apps.notifications.tasks import send_daily_dashboard_emails
+        >>> stats = send_daily_dashboard_emails()
+        >>> print(stats)
+        {'emails_sent': 15, 'users_skipped': 5, 'users_processed': 20}
     """
-    pass
+    now = timezone.now()
+    today = now.date()
+    
+    logger.info(f"Starting daily dashboard emails at {now}")
+    
+    # Statistics tracking
+    stats = {
+        'emails_sent': 0,
+        'users_skipped': 0,
+        'users_processed': 0,
+    }
+    
+    # Get all active users
+    active_users = User.objects.filter(is_active=True)
+    
+    logger.info(f"Processing {active_users.count()} active user(s)")
+    
+    for user in active_users:
+        stats['users_processed'] += 1
+        
+        try:
+            # --- Get tasks assigned TO this user ---
+            assigned_tasks = Task.objects.filter(
+                assignee=user,
+                status__in=['pending', 'in_progress'],
+            ).select_related('created_by').order_by('deadline', '-priority')
+            
+            # --- Get tasks this user created FOR others ---
+            # (delegated tasks where assignee is NOT the creator)
+            created_tasks = Task.objects.filter(
+                created_by=user,
+                status__in=['pending', 'in_progress'],
+            ).exclude(
+                assignee=user  # Exclude personal tasks (self-assigned)
+            ).select_related('assignee').order_by('deadline', '-priority')
+            
+            # --- Skip users with no tasks in either category ---
+            if not assigned_tasks.exists() and not created_tasks.exists():
+                stats['users_skipped'] += 1
+                logger.debug(f"Skipping user {user.email} - no pending tasks")
+                continue
+            
+            # --- Send dashboard email ---
+            success = send_dashboard_email(
+                user=user,
+                assigned_tasks=assigned_tasks,
+                created_tasks=created_tasks,
+            )
+            
+            if success:
+                stats['emails_sent'] += 1
+                logger.info(
+                    f"Dashboard email sent to {user.email} "
+                    f"(assigned: {assigned_tasks.count()}, created: {created_tasks.count()})"
+                )
+            else:
+                logger.warning(f"Failed to send dashboard email to {user.email}")
+                
+        except Exception as e:
+            logger.error(f"Error processing dashboard for user {user.email}: {e}")
+    
+    logger.info(
+        f"Daily dashboard complete. Stats: {stats['emails_sent']} sent, "
+        f"{stats['users_skipped']} skipped, {stats['users_processed']} processed"
+    )
+    
+    return stats
