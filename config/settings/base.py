@@ -27,6 +27,8 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     'django_htmx',
     'django_filters',
+    'django_q',  # Background task queue (Phase 10)
+
 ]
 
 LOCAL_APPS = [
@@ -227,21 +229,24 @@ SITE_URL = config('SITE_URL', default='http://localhost:8000')
 
 
 # =============================================================================
-# DJANGO-Q2 SETTINGS (Background Tasks)
+# DJANGO-Q2 SETTINGS (Background Tasks) - Phase 10
 # =============================================================================
+# Using ORM broker (Django database) - no Redis/RabbitMQ needed
+# Documentation: https://django-q2.readthedocs.io/
 Q_CLUSTER = {
-    'name': 'task_manager',
-    'workers': 2,
-    'recycle': 500,
-    'timeout': 60,
-    'compress': True,
-    'save_limit': 250,
-    'queue_limit': 500,
-    'cpu_affinity': 1,
-    'label': 'Django Q2',
-    'orm': 'default',
+    'name': 'task_manager',         # Cluster name for identification
+    'workers': 2,                    # Number of worker processes (adjust for production)
+    'timeout': 300,                  # 5 minutes max per task execution
+    'retry': 360,                    # 6 minutes before retrying failed task
+    'orm': 'default',                # Use Django ORM as message broker
+    'save_limit': 100,               # Keep last 100 results per task type
+    'ack_failures': True,            # Acknowledge failed tasks (don't retry indefinitely)
+    'sync': False,                   # Run tasks asynchronously (set True for debugging)
+    'catch_up': False,               # Don't run missed schedules on cluster startup
+    'label': 'Task Manager Queue',   # Display label in Django admin
+    'queue_limit': 500,              # Max tasks in queue
+    'cpu_affinity': 1,               # CPU affinity per worker
 }
-
 
 # =============================================================================
 # DEFAULT PRIMARY KEY FIELD TYPE
