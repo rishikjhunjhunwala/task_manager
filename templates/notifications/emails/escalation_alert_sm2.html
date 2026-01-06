@@ -1,0 +1,102 @@
+{% extends "notifications/base_email.html" %}
+
+{% block content %}
+<p>Hello {{ recipient_name }},</p>
+
+<p style="color: #dc2626; font-weight: 600; font-size: 16px;">
+    ⚠️ This task has been overdue for <strong>72+ hours</strong> and requires your attention.
+</p>
+
+<p>As a Senior Manager 2, you are receiving this escalation notice because the following task 
+has exceeded the 72-hour overdue threshold without resolution:</p>
+
+<div class="task-details" style="border-left-color: #f59e0b; background-color: #fffbeb;">
+    <h3 style="margin: 0 0 16px 0; color: #b45309; font-size: 18px;">{{ task.title }}</h3>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 0;">
+        <tr>
+            <td style="padding: 8px 0; color: #64748b; width: 140px;">Reference:</td>
+            <td style="padding: 8px 0; color: #1e293b; font-weight: 500;">{{ task.reference_number }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Priority:</td>
+            <td style="padding: 8px 0;">
+                <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #ffffff; background-color: {{ priority_info.color }};">
+                    {{ priority_info.name }}
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Original Deadline:</td>
+            <td style="padding: 8px 0;">
+                <span style="color: #dc2626; font-weight: 600; text-decoration: line-through;">
+                    {{ deadline_formatted }}
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Overdue By:</td>
+            <td style="padding: 8px 0;">
+                <span style="display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #ffffff; background-color: #f59e0b;">
+                    {% if days_overdue >= 1 %}{{ days_overdue }} day{{ days_overdue|pluralize }} {% if remaining_hours > 0 %}{{ remaining_hours }} hour{{ remaining_hours|pluralize }}{% endif %}{% else %}{{ hours_overdue }} hour{{ hours_overdue|pluralize }}{% endif %} ({{ hours_overdue }}h total)
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Current Status:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ task.get_status_display }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; color: #64748b;">Department:</td>
+            <td style="padding: 8px 0; color: #1e293b;">{{ department_name }}</td>
+        </tr>
+    </table>
+</div>
+
+<div style="background-color: #f1f5f9; border-radius: 8px; padding: 16px; margin: 24px 0;">
+    <h4 style="margin: 0 0 12px 0; color: #334155; font-size: 15px;">Assignment Details</h4>
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 6px 0; color: #64748b; width: 140px;">Assigned To:</td>
+            <td style="padding: 6px 0; color: #1e293b; font-weight: 500;">{{ assignee_name }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 0; color: #64748b;">Assignee Email:</td>
+            <td style="padding: 6px 0; color: #1e293b;">{{ assignee_email }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 6px 0; color: #64748b;">Created By:</td>
+            <td style="padding: 6px 0; color: #1e293b;">{{ creator_name }}</td>
+        </tr>
+    </table>
+</div>
+
+<div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px; padding: 16px; margin: 24px 0;">
+    <p style="margin: 0 0 8px 0; color: #92400e; font-size: 14px; font-weight: 600;">
+        📋 Recommended Actions
+    </p>
+    <ul style="margin: 0; padding-left: 20px; color: #78350f; font-size: 14px;">
+        <li style="margin-bottom: 6px;">Review the task details and current progress</li>
+        <li style="margin-bottom: 6px;">Contact the assignee ({{ assignee_name }}) for status update</li>
+        <li style="margin-bottom: 6px;">Determine if additional resources are needed</li>
+        <li style="margin-bottom: 6px;">Consider reassignment if necessary</li>
+    </ul>
+</div>
+
+<div style="background-color: #fee2e2; border-left: 4px solid #dc2626; border-radius: 4px; padding: 16px; margin: 24px 0;">
+    <p style="margin: 0; color: #991b1b; font-size: 14px;">
+        <strong>⏰ Next Escalation:</strong> If this task remains overdue for 120 hours ({{ 120|add:"-"|add:hours_overdue }} more hours), 
+        it will be escalated to Senior Manager 1 level.
+    </p>
+</div>
+
+<p style="text-align: center; margin-top: 24px;">
+    <a href="{{ task_url }}" style="display: inline-block; background-color: #f59e0b; color: #ffffff; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px;">
+        View Task Details
+    </a>
+</p>
+
+<p style="color: #64748b; font-size: 13px; margin-top: 24px;">
+    This is an automated escalation notification. You are receiving this because you have the Senior Manager 2 role.
+</p>
+{% endblock %}

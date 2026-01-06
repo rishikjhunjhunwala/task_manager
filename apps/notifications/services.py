@@ -1110,3 +1110,252 @@ def notify_overdue(task, is_first_reminder: bool = False) -> bool:
             )
     
     return any_sent
+
+# =============================================================================
+# Phase 10C: Escalation Notification Functions
+# =============================================================================
+# 
+# Add the following code to the END of your existing
+# apps/notifications/services.py file, after the notify_overdue() function.
+# =============================================================================
+
+
+def notify_escalation_sm2(task) -> bool:
+    """
+    Send 72-hour escalation notification to ALL Senior Manager 2 users.
+    
+    This function is triggered when a task has been overdue for 72 hours
+    or more. It sends an escalation alert to ALL active users with the
+    'senior_manager_2' role to ensure management awareness.
+    
+    Business Rules:
+    - Sent to ALL active Senior Manager 2 users (not just one)
+    - One-time notification (tracked by escalated_to_sm2_at field)
+    - Includes: task details, assignee info, hours overdue, creator info
+    - Sender: System email (DEFAULT_FROM_EMAIL)
+    
+    Args:
+        task: Task model instance that has been overdue for 72+ hours
+    
+    Returns:
+        bool: True if at least one email was sent successfully
+    """
+    from apps.accounts.models import User
+    
+    # Get all active Senior Manager 2 users
+    sm2_users = User.objects.filter(
+        role='senior_manager_2',
+        is_active=True
+    ).exclude(email='')  # Exclude users without email
+    
+    if not sm2_users.exists():
+        logger.warning(
+            f"No active SM2 users to escalate to: task={task.reference_number}"
+        )
+        return False
+    
+    # Calculate how long the task has been overdue
+    now = timezone.now()
+    time_overdue = now - task.deadline
+    hours_overdue = int(time_overdue.total_seconds() / 3600)
+    days_overdue = hours_overdue // 24
+    remaining_hours = hours_overdue % 24
+    
+    # Build task URL
+    task_url = get_task_url(task)
+    
+    # Format deadline for display
+    deadline_formatted = format_datetime_for_email(task.deadline)
+    
+    # Get priority display info
+    priority_info = get_priority_display(task.priority)
+    
+    # Get user display names
+    assignee_name = get_user_display_name(task.assignee) if task.assignee else 'Unassigned'
+    creator_name = get_user_display_name(task.created_by) if task.created_by else 'Unknown'
+    
+    # Get department name
+    department_name = task.department.name if task.department else 'No Department'
+    
+    # Build base template context
+    context = {
+        'task': task,
+        'task_url': task_url,
+        'assignee_name': assignee_name,
+        'assignee_email': task.assignee.email if task.assignee else 'N/A',
+        'creator_name': creator_name,
+        'department_name': department_name,
+        'hours_overdue': hours_overdue,
+        'days_overdue': days_overdue,
+        'remaining_hours': remaining_hours,
+        'deadline_formatted': deadline_formatted,
+        'priority_info': priority_info,
+        'escalation_level': 'SM2',
+        'escalation_threshold': 72,
+    }
+    
+    # Build subject line
+    subject = f"[ESCALATION - 72h] Overdue Task: {task.title} - {task.reference_number}"
+    
+    # Send to all SM2 users
+    any_sent = False
+    recipients_sent = 0
+    
+    for sm2_user in sm2_users:
+        # Add recipient-specific context
+        recipient_context = {
+            **context,
+            'recipient': sm2_user,
+            'recipient_name': get_user_display_name(sm2_user),
+        }
+        
+        result = send_notification_email(
+            to_email=sm2_user.email,
+            subject=subject,
+            template_name='escalation_alert_sm2',
+            context=recipient_context,
+        )
+        
+        if result:
+            any_sent = True
+            recipients_sent += 1
+            logger.info(
+                f"72-hour escalation sent to SM2: "
+                f"task={task.reference_number}, to={sm2_user.email}"
+            )
+        else:
+            logger.warning(
+                f"Failed to send 72-hour escalation to SM2: "
+                f"task={task.reference_number}, to={sm2_user.email}"
+            )
+    
+    logger.info(
+        f"72-hour escalation complete: task={task.reference_number}, "
+        f"sent_to={recipients_sent}/{sm2_users.count()} SM2 users"
+    )
+    
+    return any_sent
+
+
+def notify_escalation_sm1(task) -> bool:
+    """
+    Send 120-hour CRITICAL escalation notification to ALL Senior Manager 1 users.
+    
+    This function is triggered when a task has been overdue for 120 hours
+    (5 days) or more. This is the highest escalation level and indicates
+    a critical situation requiring immediate attention.
+    
+    Business Rules:
+    - Sent to ALL active Senior Manager 1 users (not just one)
+    - One-time notification (tracked by escalated_to_sm1_at field)
+    - Includes: task details, assignee info, hours overdue, creator info
+    - Marked as CRITICAL in subject and template
+    - Sender: System email (DEFAULT_FROM_EMAIL)
+    
+    Args:
+        task: Task model instance that has been overdue for 120+ hours
+    
+    Returns:
+        bool: True if at least one email was sent successfully
+    """
+    from apps.accounts.models import User
+    
+    # Get all active Senior Manager 1 users
+    sm1_users = User.objects.filter(
+        role='senior_manager_1',
+        is_active=True
+    ).exclude(email='')  # Exclude users without email
+    
+    if not sm1_users.exists():
+        logger.warning(
+            f"No active SM1 users to escalate to: task={task.reference_number}"
+        )
+        return False
+    
+    # Calculate how long the task has been overdue
+    now = timezone.now()
+    time_overdue = now - task.deadline
+    hours_overdue = int(time_overdue.total_seconds() / 3600)
+    days_overdue = hours_overdue // 24
+    remaining_hours = hours_overdue % 24
+    
+    # Build task URL
+    task_url = get_task_url(task)
+    
+    # Format deadline for display
+    deadline_formatted = format_datetime_for_email(task.deadline)
+    
+    # Get priority display info
+    priority_info = get_priority_display(task.priority)
+    
+    # Get user display names
+    assignee_name = get_user_display_name(task.assignee) if task.assignee else 'Unassigned'
+    creator_name = get_user_display_name(task.created_by) if task.created_by else 'Unknown'
+    
+    # Get department name
+    department_name = task.department.name if task.department else 'No Department'
+    
+    # Get previous escalation info (SM2 escalation timestamp)
+    sm2_escalated_at = None
+    if task.escalated_to_sm2_at:
+        sm2_escalated_at = format_datetime_for_email(task.escalated_to_sm2_at)
+    
+    # Build base template context
+    context = {
+        'task': task,
+        'task_url': task_url,
+        'assignee_name': assignee_name,
+        'assignee_email': task.assignee.email if task.assignee else 'N/A',
+        'creator_name': creator_name,
+        'department_name': department_name,
+        'hours_overdue': hours_overdue,
+        'days_overdue': days_overdue,
+        'remaining_hours': remaining_hours,
+        'deadline_formatted': deadline_formatted,
+        'priority_info': priority_info,
+        'escalation_level': 'SM1',
+        'escalation_threshold': 120,
+        'sm2_escalated_at': sm2_escalated_at,
+    }
+    
+    # Build subject line - marked as CRITICAL
+    subject = f"[CRITICAL - 120h ESCALATION] Overdue Task: {task.title} - {task.reference_number}"
+    
+    # Send to all SM1 users
+    any_sent = False
+    recipients_sent = 0
+    
+    for sm1_user in sm1_users:
+        # Add recipient-specific context
+        recipient_context = {
+            **context,
+            'recipient': sm1_user,
+            'recipient_name': get_user_display_name(sm1_user),
+        }
+        
+        result = send_notification_email(
+            to_email=sm1_user.email,
+            subject=subject,
+            template_name='escalation_alert_sm1',
+            context=recipient_context,
+        )
+        
+        if result:
+            any_sent = True
+            recipients_sent += 1
+            logger.info(
+                f"120-hour CRITICAL escalation sent to SM1: "
+                f"task={task.reference_number}, to={sm1_user.email}"
+            )
+        else:
+            logger.warning(
+                f"Failed to send 120-hour escalation to SM1: "
+                f"task={task.reference_number}, to={sm1_user.email}"
+            )
+    
+    logger.info(
+        f"120-hour CRITICAL escalation complete: task={task.reference_number}, "
+        f"sent_to={recipients_sent}/{sm1_users.count()} SM1 users"
+    )
+    
+    return any_sent

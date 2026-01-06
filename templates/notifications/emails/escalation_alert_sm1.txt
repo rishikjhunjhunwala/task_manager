@@ -1,0 +1,66 @@
+{% extends "notifications/base_email.txt" %}
+
+{% block content %}
+================================================================================
+🚨 CRITICAL ESCALATION - 120+ HOURS OVERDUE 🚨
+================================================================================
+
+Hello {{ recipient_name }},
+
+This task has been overdue for 120+ HOURS (5+ DAYS) and requires 
+IMMEDIATE EXECUTIVE ATTENTION.
+
+As a Senior Manager 1, you are receiving this critical escalation notice 
+because the following task has exceeded the 120-hour overdue threshold. 
+This is the highest escalation level and indicates a situation requiring 
+immediate intervention.
+
+--------------------------------------------------------------------------------
+TASK DETAILS
+--------------------------------------------------------------------------------
+
+Title:            {{ task.title }}
+Reference:        {{ task.reference_number }}
+Priority:         {{ priority_info.name }}
+Original Deadline: {{ deadline_formatted }}
+Overdue By:       {% if days_overdue >= 1 %}{{ days_overdue }} day{{ days_overdue|pluralize }} {% if remaining_hours > 0 %}{{ remaining_hours }} hour{{ remaining_hours|pluralize }}{% endif %}{% else %}{{ hours_overdue }} hour{{ hours_overdue|pluralize }}{% endif %} ({{ hours_overdue }}h total)
+Current Status:   {{ task.get_status_display }}
+Department:       {{ department_name }}
+
+--------------------------------------------------------------------------------
+ASSIGNMENT DETAILS
+--------------------------------------------------------------------------------
+
+Assigned To:      {{ assignee_name }}
+Assignee Email:   {{ assignee_email }}
+Created By:       {{ creator_name }}
+
+{% if sm2_escalated_at %}
+--------------------------------------------------------------------------------
+PREVIOUS ESCALATION
+--------------------------------------------------------------------------------
+
+This task was escalated to Senior Manager 2 on {{ sm2_escalated_at }}.
+The issue has remained unresolved since then.
+
+{% endif %}
+--------------------------------------------------------------------------------
+🚨 CRITICAL ACTIONS REQUIRED
+--------------------------------------------------------------------------------
+
+1. IMMEDIATELY review this task and determine root cause of delay
+2. Contact the assignee and their manager directly
+3. Evaluate if task needs immediate reassignment or additional resources
+4. Consider escalating to department head or project stakeholders
+5. Document the resolution plan and timeline
+
+================================================================================
+THIS IS THE HIGHEST ESCALATION LEVEL
+IMMEDIATE ACTION IS REQUIRED TO RESOLVE THIS ISSUE
+================================================================================
+
+View Task: {{ task_url }}
+
+This is an automated critical escalation notification. You are receiving this 
+because you have the Senior Manager 1 role.
+{% endblock %}
