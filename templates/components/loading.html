@@ -1,0 +1,181 @@
+{% comment %}
+Loading Indicators & Toast Container Component
+Sub-Phase 11B: Loading Indicators & Flash Messages Enhancement
+
+Includes:
+- Global loading overlay for full-page HTMX requests
+- Button spinner template for inline loading
+- Skeleton loader template for content areas
+- Toast notification container (positioned bottom-right)
+{% endcomment %}
+
+<!-- ============================================================================
+     GLOBAL LOADING OVERLAY
+     Shows during any HTMX request when triggered by hx-indicator on body
+     ============================================================================ -->
+<div id="global-loading" 
+     class="htmx-indicator fixed inset-0 z-50 flex items-center justify-center bg-gray-900/30 backdrop-blur-sm">
+    <div class="bg-white rounded-lg shadow-xl p-6 flex items-center space-x-4">
+        <!-- Spinner -->
+        <svg class="animate-spin h-8 w-8 text-indigo-600" 
+             xmlns="http://www.w3.org/2000/svg" 
+             fill="none" 
+             viewBox="0 0 24 24">
+            <circle class="opacity-25" 
+                    cx="12" cy="12" r="10" 
+                    stroke="currentColor" 
+                    stroke-width="4"></circle>
+            <path class="opacity-75" 
+                  fill="currentColor" 
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="text-gray-700 font-medium">Loading...</span>
+    </div>
+</div>
+
+<!-- ============================================================================
+     INLINE BUTTON SPINNER
+     Include inside buttons that need loading state during HTMX requests
+     Usage: {% include 'components/loading.html' with type='button-spinner' %}
+     ============================================================================ -->
+{% if type == 'button-spinner' %}
+<svg class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4" 
+     xmlns="http://www.w3.org/2000/svg" 
+     fill="none" 
+     viewBox="0 0 24 24">
+    <circle class="opacity-25" 
+            cx="12" cy="12" r="10" 
+            stroke="currentColor" 
+            stroke-width="4"></circle>
+    <path class="opacity-75" 
+          fill="currentColor" 
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+</svg>
+{% endif %}
+
+<!-- ============================================================================
+     SKELETON LOADER - CARD
+     Use for loading placeholder content
+     Usage: {% include 'components/loading.html' with type='skeleton-card' %}
+     ============================================================================ -->
+{% if type == 'skeleton-card' %}
+<div class="animate-pulse bg-white rounded-lg shadow p-4">
+    <div class="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+    <div class="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+    <div class="h-3 bg-gray-200 rounded w-5/6 mb-2"></div>
+    <div class="h-3 bg-gray-200 rounded w-2/3"></div>
+</div>
+{% endif %}
+
+<!-- ============================================================================
+     SKELETON LOADER - TABLE ROW
+     Use for loading placeholder in table views
+     Usage: {% include 'components/loading.html' with type='skeleton-row' %}
+     ============================================================================ -->
+{% if type == 'skeleton-row' %}
+<tr class="animate-pulse">
+    <td class="px-4 py-4"><div class="h-4 bg-gray-200 rounded w-24"></div></td>
+    <td class="px-4 py-4"><div class="h-4 bg-gray-200 rounded w-48"></div></td>
+    <td class="px-4 py-4"><div class="h-4 bg-gray-200 rounded w-20"></div></td>
+    <td class="px-4 py-4"><div class="h-4 bg-gray-200 rounded w-16"></div></td>
+    <td class="px-4 py-4"><div class="h-4 bg-gray-200 rounded w-24"></div></td>
+</tr>
+{% endif %}
+
+<!-- ============================================================================
+     SKELETON LOADER - LIST
+     Use for loading placeholder in list views
+     Usage: {% include 'components/loading.html' with type='skeleton-list' count=3 %}
+     ============================================================================ -->
+{% if type == 'skeleton-list' %}
+<div class="space-y-4">
+    {% for i in "123"|make_list %}
+    <div class="animate-pulse bg-white rounded-lg shadow p-4 flex items-center space-x-4">
+        <div class="rounded-full bg-gray-200 h-10 w-10"></div>
+        <div class="flex-1 space-y-2">
+            <div class="h-4 bg-gray-200 rounded w-3/4"></div>
+            <div class="h-3 bg-gray-200 rounded w-1/2"></div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- ============================================================================
+     TOAST NOTIFICATION CONTAINER
+     Positioned bottom-right, toasts stack newest on bottom
+     JavaScript in base.html manages toast creation and dismissal
+     ============================================================================ -->
+<div id="toast-container" 
+     class="fixed bottom-4 right-4 z-50 flex flex-col-reverse gap-3 pointer-events-none max-w-sm w-full"
+     aria-live="polite" 
+     aria-atomic="true">
+    <!-- Toasts are dynamically inserted here by JavaScript -->
+</div>
+
+<!-- ============================================================================
+     TOAST TEMPLATE (Hidden, used by JavaScript)
+     Toast types: success, error, warning, info
+     ============================================================================ -->
+<template id="toast-template">
+    <div class="toast pointer-events-auto w-full bg-white rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 overflow-hidden transform transition-all duration-300 ease-out translate-x-full opacity-0"
+         role="alert"
+         data-toast>
+        <div class="p-4">
+            <div class="flex items-start">
+                <!-- Icon container -->
+                <div class="flex-shrink-0 toast-icon">
+                    <!-- Icons are set dynamically based on toast type -->
+                </div>
+                
+                <!-- Message -->
+                <div class="ml-3 w-0 flex-1 pt-0.5">
+                    <p class="text-sm font-medium text-gray-900 toast-message"></p>
+                </div>
+                
+                <!-- Dismiss button -->
+                <div class="ml-4 flex-shrink-0 flex">
+                    <button type="button" 
+                            class="toast-dismiss bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <span class="sr-only">Close</span>
+                        <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" 
+                                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" 
+                                  clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Progress bar for auto-dismiss -->
+        <div class="toast-progress h-1 bg-gray-200">
+            <div class="toast-progress-bar h-full transition-all ease-linear" style="width: 100%"></div>
+        </div>
+    </div>
+</template>
+
+<!-- Icon templates for different toast types -->
+<template id="toast-icon-success">
+    <svg class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+</template>
+
+<template id="toast-icon-error">
+    <svg class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+</template>
+
+<template id="toast-icon-warning">
+    <svg class="h-6 w-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+    </svg>
+</template>
+
+<template id="toast-icon-info">
+    <svg class="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+</template>

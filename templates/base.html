@@ -1,196 +1,316 @@
-{% comment %}
-templates/base.html
-Phase 11A: Refactored Base Template with Component Partials
-
-Includes:
-- Navigation partial: templates/components/navigation.html
-- Messages partial: templates/components/messages.html
-- Clean structure with proper block inheritance
-- Tailwind CSS via CDN
-- HTMX for dynamic updates
-- Alpine.js for UI interactions
-- CSRF token included in all HTMX requests
-{% endcomment %}
+{% load static %}
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Task Management Application - Century Extrusions">
     <title>{% block title %}Task Manager{% endblock %}</title>
     
-    <!-- Tailwind CSS CDN -->
+    <!-- Tailwind CSS via CDN (no build step) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- HTMX -->
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10" 
+            integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" 
+            crossorigin="anonymous"></script>
     
-    <!-- Alpine.js -->
+    <!-- Alpine.js for dropdowns and interactions -->
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
-    <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
-    
-    <!-- Custom Tailwind Configuration -->
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: {
-                            50: '#eef2ff',
-                            100: '#e0e7ff',
-                            200: '#c7d2fe',
-                            300: '#a5b4fc',
-                            400: '#818cf8',
-                            500: '#6366f1',
-                            600: '#4f46e5',
-                            700: '#4338ca',
-                            800: '#3730a3',
-                            900: '#312e81',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    
-    <!-- Custom Styles -->
-    <style type="text/tailwindcss">
-        /* Badge animation on HTMX update */
-        @keyframes badge-pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-        }
-        
-        .badge-updated {
-            animation: badge-pulse 0.3s ease-in-out;
-        }
-        
-        /* Navigation badge styles */
-        .nav-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 20px;
-            height: 20px;
-            padding: 0 6px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            line-height: 1;
-            border-radius: 9999px;
-        }
-        
-        /* Status colors */
-        .status-pending { @apply bg-yellow-100 text-yellow-800 border border-yellow-200; }
-        .status-in-progress { @apply bg-blue-100 text-blue-800 border border-blue-200; }
-        .status-completed { @apply bg-green-100 text-green-800 border border-green-200; }
-        .status-verified { @apply bg-emerald-100 text-emerald-800 border border-emerald-200; }
-        .status-cancelled { @apply bg-gray-100 text-gray-800 border border-gray-200; }
-        
-        /* Priority colors */
-        .priority-low { @apply bg-gray-100 text-gray-700; }
-        .priority-medium { @apply bg-blue-100 text-blue-700; }
-        .priority-high { @apply bg-amber-100 text-amber-700; }
-        .priority-critical { @apply bg-red-100 text-red-700; }
-        
-        /* Task row colors */
-        .task-row-overdue { @apply bg-red-50 border-l-4 border-red-400; }
-        .task-row-critical { @apply bg-red-50; }
-        .task-row-high { @apply bg-amber-50; }
-        
-        /* Button styles */
-        .btn {
-            @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-150;
-        }
-        
-        .btn-primary {
-            @apply bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500;
-        }
-        
-        .btn-secondary {
-            @apply bg-white text-gray-700 border-gray-300 hover:bg-gray-50 focus:ring-indigo-500;
-        }
-        
-        .btn-danger {
-            @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
-        }
-        
-        .btn-success {
-            @apply bg-green-600 text-white hover:bg-green-700 focus:ring-green-500;
-        }
-        
-        /* Form input styles */
-        .form-input {
-            @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm;
-        }
-        
-        .form-select {
-            @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm;
-        }
-        
-        .form-textarea {
-            @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm;
-        }
-        
-        .form-label {
-            @apply block text-sm font-medium text-gray-700 mb-1;
-        }
-        
-        .form-error {
-            @apply mt-1 text-sm text-red-600;
-        }
-        
-        /* Card styles */
-        .card {
-            @apply bg-white shadow-sm rounded-lg border border-gray-200;
-        }
-        
-        .card-header {
-            @apply px-4 py-5 sm:px-6 border-b border-gray-200;
-        }
-        
-        .card-body {
-            @apply px-4 py-5 sm:p-6;
-        }
-        
-        .card-footer {
-            @apply px-4 py-4 sm:px-6 border-t border-gray-200 bg-gray-50;
-        }
-        
-        /* Toast notifications container */
-        .toast-container {
-            position: fixed;
-            bottom: 1rem;
-            right: 1rem;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        
-        /* HTMX loading indicator */
-        .htmx-request .htmx-indicator {
-            display: inline-block;
-        }
-        
-        .htmx-indicator {
-            display: none;
-        }
-    </style>
+    <!-- Custom CSS (includes HTMX transitions, toast styles, etc.) -->
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
     
     {% block extra_css %}{% endblock %}
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-    
-    <!-- Navigation Component -->
-    {% include 'components/navigation.html' %}
 
-    <!-- Flash Messages Component -->
-    {% include 'components/messages.html' %}
+<body class="bg-gray-100 min-h-screen flex flex-col"
+      hx-indicator="#global-loading"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm" x-data="{ mobileMenuOpen: false }">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <!-- Left side: Logo and Navigation -->
+                <div class="flex">
+                    <!-- Logo -->
+                    <div class="flex-shrink-0 flex items-center">
+                        <a href="{% url 'tasks:dashboard' %}" class="text-xl font-bold text-indigo-600">
+                            Task Manager
+                        </a>
+                    </div>
+                    
+                    <!-- Desktop Navigation Links -->
+                    {% if user.is_authenticated %}
+                    <div class="hidden sm:ml-6 sm:flex sm:space-x-4">
+                        <!-- Dashboard -->
+                        <a href="{% url 'tasks:dashboard' %}" 
+                           class="{% if request.resolver_match.url_name == 'dashboard' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                            </svg>
+                            Dashboard
+                            {% if pending_task_count > 0 %}
+                            <span class="ml-1 nav-badge bg-indigo-100 text-indigo-800">{{ pending_task_count }}</span>
+                            {% endif %}
+                        </a>
+                        
+                        <!-- Tasks -->
+                        <a href="{% url 'tasks:task_list' %}" 
+                           class="{% if request.resolver_match.url_name == 'task_list' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                            </svg>
+                            All Tasks
+                        </a>
+                        
+                        <!-- Kanban -->
+                        <a href="{% url 'tasks:kanban' %}" 
+                           class="{% if request.resolver_match.url_name == 'kanban' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+                            </svg>
+                            Kanban
+                        </a>
+                        
+                        {% if can_view_department_tasks %}
+                        <!-- Department Tasks (Manager+) -->
+                        <a href="{% url 'tasks:department_tasks' %}" 
+                           class="{% if request.resolver_match.url_name == 'department_tasks' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                            </svg>
+                            Overview
+                            {% if overdue_task_count > 0 %}
+                            <span class="ml-1 nav-badge bg-red-600 text-white">!</span>
+                            {% endif %}
+                        </a>
+                        {% endif %}
+                        
+                        {% if can_view_reports %}
+                        <!-- Reports -->
+                        <a href="{% url 'reports:dashboard' %}" 
+                           class="{% if request.resolver_match.app_name == 'reports' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                            </svg>
+                            Reports
+                        </a>
+                        {% endif %}
+                        
+                        {% if can_view_activity_log %}
+                        <!-- Activity Log (Admin only) -->
+                        <a href="{% url 'activity_log:activity_list' %}" 
+                           class="{% if request.resolver_match.app_name == 'activity_log' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                            </svg>
+                            Activity
+                        </a>
+                        {% endif %}                       
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Right side: User menu -->
+                <div class="hidden sm:ml-6 sm:flex sm:items-center">
+                    {% if user.is_authenticated %}
+                    <!-- Create Task Button -->
+                    <a href="{% url 'tasks:task_create' %}" 
+                       class="mr-4 inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        New Task
+                    </a>
+                    
+                    <!-- User Dropdown -->
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open" 
+                                @keydown.escape.window="open = false"
+                                type="button" 
+                                class="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <span class="sr-only">Open user menu</span>
+                            <div class="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                                <span class="text-sm font-medium text-indigo-800">
+                                    {{ user.first_name.0|default:user.email.0|upper }}
+                                </span>
+                            </div>
+                            <span class="ml-2 text-gray-700 hidden lg:block">{{ user.get_full_name|default:user.email }}</span>
+                            <svg class="ml-1 h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                        
+                        <!-- Dropdown Menu -->
+                        <div x-show="open" 
+                             @click.away="open = false"
+                             x-cloak
+                             x-transition:enter="transition ease-out duration-100"
+                             x-transition:enter-start="transform opacity-0 scale-95"
+                             x-transition:enter-end="transform opacity-100 scale-100"
+                             x-transition:leave="transition ease-in duration-75"
+                             x-transition:leave-start="transform opacity-100 scale-100"
+                             x-transition:leave-end="transform opacity-0 scale-95"
+                             class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
+                            <div class="px-4 py-2 border-b border-gray-100">
+                                <p class="text-sm font-medium text-gray-900 truncate">{{ user.get_full_name|default:user.email }}</p>
+                                <p class="text-xs text-gray-500">{{ user.get_role_display }}</p>
+                            </div>
+                            <a href="{% url 'accounts:profile' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                Your Profile
+                            </a>
+                            <a href="{% url 'accounts:password_change' %}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                Change Password
+                            </a>
+                            <form method="post" action="{% url 'accounts:logout' %}">
+                                {% csrf_token %}
+                                <button type="submit" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Sign out
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {% else %}
+                    <a href="{% url 'accounts:login' %}" class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm font-medium">
+                        Sign in
+                    </a>
+                    {% endif %}
+                </div>
+                
+                <!-- Mobile menu button -->
+                <div class="-mr-2 flex items-center sm:hidden">
+                    <button @click="mobileMenuOpen = !mobileMenuOpen" 
+                            type="button" 
+                            class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500">
+                        <span class="sr-only">Open main menu</span>
+                        <svg class="h-6 w-6" :class="{ 'hidden': mobileMenuOpen, 'block': !mobileMenuOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                        <svg class="h-6 w-6" :class="{ 'block': mobileMenuOpen, 'hidden': !mobileMenuOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Mobile menu -->
+        <div x-show="mobileMenuOpen" x-cloak class="sm:hidden">
+            {% if user.is_authenticated %}
+            <div class="pt-2 pb-3 space-y-1">
+                <a href="{% url 'tasks:dashboard' %}" 
+                   class="{% if request.resolver_match.url_name == 'dashboard' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                    Dashboard
+                </a>
+                <a href="{% url 'tasks:task_list' %}" 
+                   class="{% if request.resolver_match.url_name == 'task_list' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                    All Tasks
+                </a>
+                <a href="{% url 'tasks:kanban' %}" 
+                   class="{% if request.resolver_match.url_name == 'kanban' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                    Kanban
+                </a>
+                <a href="{% url 'tasks:task_create' %}" 
+                   class="border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700 block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                    + New Task
+                </a>
+            </div>
+            <div class="pt-4 pb-3 border-t border-gray-200">
+                <div class="flex items-center px-4">
+                    <div class="flex-shrink-0">
+                        <div class="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                            <span class="text-sm font-medium text-indigo-800">
+                                {{ user.first_name.0|default:user.email.0|upper }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="ml-3">
+                        <div class="text-base font-medium text-gray-800">{{ user.get_full_name|default:user.email }}</div>
+                        <div class="text-sm font-medium text-gray-500">{{ user.email }}</div>
+                    </div>
+                </div>
+                <div class="mt-3 space-y-1">
+                    <a href="{% url 'accounts:profile' %}" class="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
+                        Your Profile
+                    </a>
+                    <a href="{% url 'accounts:password_change' %}" class="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
+                        Change Password
+                    </a>
+                    <form method="post" action="{% url 'accounts:logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
+                            Sign out
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <div class="pt-2 pb-3 space-y-1">
+                <a href="{% url 'accounts:login' %}" class="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700">
+                    Sign in
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Flash Messages (Django messages framework) -->
+    {% if messages %}
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        {% for message in messages %}
+        <div x-data="{ show: true }" 
+             x-show="show" 
+             x-init="setTimeout(() => show = false, {% if message.tags == 'error' %}5000{% elif message.tags == 'warning' %}4000{% else %}3000{% endif %})"
+             x-transition:leave="transition ease-in duration-300"
+             x-transition:leave-start="opacity-100 transform translate-y-0"
+             x-transition:leave-end="opacity-0 transform -translate-y-2"
+             class="rounded-md p-4 mb-3 {% if message.tags == 'error' %}bg-red-50{% elif message.tags == 'success' %}bg-green-50{% elif message.tags == 'warning' %}bg-yellow-50{% else %}bg-blue-50{% endif %}">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    {% if message.tags == 'error' %}
+                    <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                    {% elif message.tags == 'success' %}
+                    <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                    {% elif message.tags == 'warning' %}
+                    <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    {% else %}
+                    <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
+                    {% endif %}
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium {% if message.tags == 'error' %}text-red-800{% elif message.tags == 'success' %}text-green-800{% elif message.tags == 'warning' %}text-yellow-800{% else %}text-blue-800{% endif %}">
+                        {{ message }}
+                    </p>
+                </div>
+                <div class="ml-auto pl-3">
+                    <div class="-mx-1.5 -my-1.5">
+                        <button @click="show = false" 
+                                type="button" 
+                                class="inline-flex rounded-md p-1.5 {% if message.tags == 'error' %}text-red-500 hover:bg-red-100{% elif message.tags == 'success' %}text-green-500 hover:bg-green-100{% elif message.tags == 'warning' %}text-yellow-500 hover:bg-yellow-100{% else %}text-blue-500 hover:bg-blue-100{% endif %} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <span class="sr-only">Dismiss</span>
+                            <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     <!-- Main Content -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow">
         {% block content %}{% endblock %}
     </main>
 
@@ -203,142 +323,147 @@ Includes:
         </div>
     </footer>
 
-    <!-- Toast Container for HTMX/JS notifications -->
-    <div id="toast-container" class="toast-container"></div>
+    <!-- Global Loading Indicator and Toast Container -->
+    {% include 'components/loading.html' %}
 
-    <!-- Base JavaScript -->
+    <!-- Toast Notification JavaScript -->
     <script>
-    // =========================================================================
-    // HTMX Configuration
-    // =========================================================================
-    
-    // Ensure CSRF token is included in all HTMX requests
-    document.body.addEventListener('htmx:configRequest', function(evt) {
-        evt.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
-    });
-    
-    // Handle HTMX errors gracefully
-    document.body.addEventListener('htmx:responseError', function(evt) {
-        console.error('HTMX Error:', evt.detail.xhr.status, evt.detail.xhr.responseText);
-        showToast('An error occurred. Please try again.', 'error');
-    });
-    
-    // Badge animation on HTMX update
-    document.body.addEventListener('htmx:afterSwap', function(evt) {
-        if (evt.target.id && (evt.target.id.includes('badge') || evt.target.id.includes('Badge'))) {
-            evt.target.classList.add('badge-updated');
-            setTimeout(function() {
-                evt.target.classList.remove('badge-updated');
-            }, 300);
-        }
-    });
-    
-    // =========================================================================
-    // Toast Notification System
-    // =========================================================================
-    
     /**
-     * Show a toast notification
-     * @param {string} message - The message to display
-     * @param {string} type - Type: 'success', 'error', 'warning', 'info'
-     * @param {number} duration - Auto-dismiss duration in ms (default: 5000)
+     * Toast Notification System
+     * Sub-Phase 11B: Loading Indicators & Flash Messages Enhancement
+     * 
+     * Usage:
+     *   showToast('Message here', 'success');  // success, error, warning, info
+     *   showToast('Error occurred', 'error');
      */
-    function showToast(message, type = 'success', duration = 5000) {
-        const container = document.getElementById('toast-container');
-        if (!container) return;
+    (function() {
+        'use strict';
         
-        const toast = document.createElement('div');
-        
-        // Color classes based on type
-        const colorClasses = {
-            success: 'bg-green-50 text-green-800 border-l-4 border-green-400',
-            error: 'bg-red-50 text-red-800 border-l-4 border-red-400',
-            warning: 'bg-yellow-50 text-yellow-800 border-l-4 border-yellow-400',
-            info: 'bg-blue-50 text-blue-800 border-l-4 border-blue-400'
+        // Toast durations in milliseconds (as per business rules)
+        const TOAST_DURATIONS = {
+            success: 3000,
+            info: 3000,
+            warning: 4000,
+            error: 5000
         };
         
-        // Icon SVGs based on type
-        const icons = {
-            success: '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>',
-            error: '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>',
-            warning: '<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>',
-            info: '<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>'
+        /**
+         * Show a toast notification
+         * @param {string} message - The message to display
+         * @param {string} type - Toast type: 'success', 'error', 'warning', 'info'
+         */
+        window.showToast = function(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const template = document.getElementById('toast-template');
+            const iconTemplate = document.getElementById(`toast-icon-${type}`);
+            
+            if (!container || !template) {
+                console.warn('Toast container or template not found');
+                return;
+            }
+            
+            // Clone the template
+            const toast = template.content.cloneNode(true).querySelector('[data-toast]');
+            
+            // Set the message
+            toast.querySelector('.toast-message').textContent = message;
+            
+            // Set the icon
+            if (iconTemplate) {
+                toast.querySelector('.toast-icon').innerHTML = iconTemplate.innerHTML;
+            }
+            
+            // Add type-specific class for progress bar color
+            toast.classList.add(`toast-${type}`);
+            
+            // Get the duration
+            const duration = TOAST_DURATIONS[type] || TOAST_DURATIONS.info;
+            
+            // Set up the progress bar animation
+            const progressBar = toast.querySelector('.toast-progress-bar');
+            progressBar.style.transition = `width ${duration}ms linear`;
+            
+            // Add dismiss functionality
+            const dismissBtn = toast.querySelector('.toast-dismiss');
+            const removeToast = () => {
+                toast.classList.remove('toast-enter');
+                toast.classList.add('toast-exit');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            };
+            
+            dismissBtn.addEventListener('click', removeToast);
+            
+            // Insert the toast (newest at bottom per business rules)
+            container.insertBefore(toast, container.firstChild);
+            
+            // Trigger enter animation (need slight delay for DOM update)
+            requestAnimationFrame(() => {
+                toast.classList.add('toast-enter');
+                // Start progress bar animation
+                requestAnimationFrame(() => {
+                    progressBar.style.width = '0%';
+                });
+            });
+            
+            // Auto-dismiss after duration
+            const timeoutId = setTimeout(removeToast, duration);
+            
+            // Pause on hover
+            toast.addEventListener('mouseenter', () => {
+                clearTimeout(timeoutId);
+                progressBar.style.animationPlayState = 'paused';
+                progressBar.style.transition = 'none';
+            });
+            
+            toast.addEventListener('mouseleave', () => {
+                // Resume countdown with remaining time based on progress bar width
+                const remaining = (parseFloat(progressBar.style.width) / 100) * duration;
+                if (remaining > 0) {
+                    progressBar.style.transition = `width ${remaining}ms linear`;
+                    progressBar.style.width = '0%';
+                    setTimeout(removeToast, remaining);
+                }
+            });
         };
         
-        toast.className = `p-4 rounded-md shadow-lg ${colorClasses[type] || colorClasses.info} transform transition-all duration-300 ease-in-out`;
-        toast.innerHTML = `
-            <div class="flex items-center">
-                <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                    ${icons[type] || icons.info}
-                </svg>
-                <span class="text-sm font-medium flex-1">${message}</span>
-                <button onclick="this.closest('.toast-container > div').remove()" 
-                        class="ml-4 text-gray-400 hover:text-gray-600 focus:outline-none">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
-                    </svg>
-                </button>
-            </div>
-        `;
-        
-        // Add entrance animation
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(100%)';
-        container.appendChild(toast);
-        
-        // Trigger animation
-        requestAnimationFrame(() => {
-            toast.style.opacity = '1';
-            toast.style.transform = 'translateX(0)';
+        // HTMX Error and Timeout Handlers
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            const status = evt.detail.xhr.status;
+            let message = 'An error occurred. Please try again.';
+            
+            if (status === 403) {
+                message = 'You do not have permission to perform this action.';
+            } else if (status === 404) {
+                message = 'The requested resource was not found.';
+            } else if (status === 500) {
+                message = 'A server error occurred. Please try again later.';
+            } else if (status === 0) {
+                message = 'Unable to connect to the server. Please check your connection.';
+            }
+            
+            showToast(message, 'error');
         });
         
-        // Auto-remove after duration
-        if (duration > 0) {
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateX(100%)';
-                setTimeout(() => toast.remove(), 300);
-            }, duration);
-        }
-    }
-    
-    // Expose to global scope for HTMX event handlers and other scripts
-    window.showToast = showToast;
-    
-    // =========================================================================
-    // Utility Functions
-    // =========================================================================
-    
-    /**
-     * Format a date string to a human-readable format
-     * @param {string} dateString - ISO date string
-     * @returns {string} Formatted date string
-     */
-    function formatDate(dateString) {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-IN', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
+        document.body.addEventListener('htmx:timeout', function(evt) {
+            showToast('Request timed out. Please try again.', 'warning');
         });
-    }
-    
-    /**
-     * Confirm action with a simple confirm dialog
-     * @param {string} message - Confirmation message
-     * @returns {boolean} User's choice
-     */
-    function confirmAction(message) {
-        return confirm(message);
-    }
-    
-    // Expose utility functions
-    window.formatDate = formatDate;
-    window.confirmAction = confirmAction;
+        
+        document.body.addEventListener('htmx:sendError', function(evt) {
+            showToast('Unable to send request. Please check your connection.', 'error');
+        });
+        
+        // Optional: Show toast for successful HTMX swaps with HX-Trigger header
+        document.body.addEventListener('showToast', function(evt) {
+            if (evt.detail && evt.detail.message) {
+                showToast(evt.detail.message, evt.detail.type || 'success');
+            }
+        });
+        
+    })();
     </script>
-    
+
     {% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -64,8 +64,8 @@ Required context variables (from context processors):
                     </a>
                     
                     <!-- Kanban Board Link -->
-                    <a href="{% url 'tasks:kanban_board' %}" 
-                       class="{% if request.resolver_match.url_name == 'kanban_board' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                    <a href="{% url 'tasks:kanban' %}" 
+                       class="{% if request.resolver_match.url_name == 'kanban' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                         <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
                         </svg>
@@ -259,8 +259,8 @@ Required context variables (from context processors):
             </a>
             
             <!-- Kanban -->
-            <a href="{% url 'tasks:kanban_board' %}" 
-               class="{% if request.resolver_match.url_name == 'kanban_board' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+            <a href="{% url 'tasks:kanban' %}" 
+               class="{% if request.resolver_match.url_name == 'kanban' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
                 Kanban Board
             </a>
             

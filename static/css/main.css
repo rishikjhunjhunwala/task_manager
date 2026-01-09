@@ -1,15 +1,35 @@
 /* 
  * Task Manager Custom Styles
+ * =============================================================================
  * Tailwind CSS handles most styling via CDN
- * This file contains custom task-specific styles
+ * This file contains custom task-specific styles and HTMX/Alpine enhancements
+ * 
+ * Sub-Phase 11B: Added loading indicators, toast notifications, and transitions
+ * =============================================================================
  */
 
-/* Task status background colors */
+
+/* =============================================================================
+   ALPINE.JS CLOAK
+   Hide elements until Alpine.js initializes
+   ============================================================================= */
+
+[x-cloak] {
+    display: none !important;
+}
+
+
+/* =============================================================================
+   TASK STATUS COLORS
+   Background colors for different task statuses
+   ============================================================================= */
+
 .status-pending {
     background-color: #FEF3C7; /* Yellow-100 */
 }
 
-.status-in-progress {
+.status-in-progress,
+.status-in_progress {
     background-color: #DBEAFE; /* Blue-100 */
 }
 
@@ -25,7 +45,12 @@
     background-color: #F3F4F6; /* Gray-100 */
 }
 
-/* Priority indicators (left border) */
+
+/* =============================================================================
+   TASK PRIORITY INDICATORS
+   Left border colors for priority levels
+   ============================================================================= */
+
 .priority-low {
     border-left: 4px solid #9CA3AF; /* Gray-400 */
 }
@@ -42,32 +67,410 @@
     border-left: 4px solid #EF4444; /* Red-500 */
 }
 
-/* Overdue task indicator */
+
+/* =============================================================================
+   OVERDUE & ESCALATED TASK INDICATORS
+   Visual emphasis for tasks requiring attention
+   ============================================================================= */
+
 .task-overdue {
     background-color: #FEE2E2 !important; /* Red-100 */
 }
 
-/* Escalated task indicator (72+ hours overdue) */
 .task-escalated {
-    background-color: #7F1D1D !important; /* Maroon/Dark Red */
+    background-color: #7F1D1D !important; /* Dark Maroon */
     color: white;
 }
 
-/* HTMX loading indicator */
+.task-escalated a {
+    color: white !important;
+}
+
+.task-escalated a:hover {
+    color: #FCA5A5 !important; /* Red-300 */
+}
+
+
+/* =============================================================================
+   HTMX LOADING INDICATORS
+   Default show/hide behavior for HTMX requests
+   ============================================================================= */
+
 .htmx-indicator {
     display: none;
+    opacity: 0;
+    transition: opacity 200ms ease-in;
 }
 
-.htmx-request .htmx-indicator {
-    display: inline-block;
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+    display: flex;
+    opacity: 1;
 }
 
-/* Loading spinner animation */
+/* Specific indicator for inline elements (spans, etc.) */
+.htmx-request .htmx-indicator-inline,
+.htmx-request.htmx-indicator-inline {
+    display: inline-flex;
+}
+
+
+/* =============================================================================
+   SPINNER ANIMATIONS
+   Various spinner and loading animations
+   ============================================================================= */
+
 @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .spinner {
     animation: spin 1s linear infinite;
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Pulse animation for skeleton loaders */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+
+/* =============================================================================
+   TOAST NOTIFICATION STYLES
+   Slide-in/slide-out animations and type-specific colors
+   ============================================================================= */
+
+/* Toast base styles */
+.toast {
+    max-width: 24rem;
+    transition: all 300ms ease-out;
+}
+
+/* Toast enter animation (slide in from right) */
+.toast.toast-enter {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+/* Toast exit animation (slide out to right) */
+.toast.toast-exit {
+    transform: translateX(100%);
+    opacity: 0;
+}
+
+/* Toast type-specific progress bar colors */
+.toast-success .toast-progress-bar {
+    background-color: #10B981; /* Green-500 */
+}
+
+.toast-error .toast-progress-bar {
+    background-color: #EF4444; /* Red-500 */
+}
+
+.toast-warning .toast-progress-bar {
+    background-color: #F59E0B; /* Amber-500 */
+}
+
+.toast-info .toast-progress-bar {
+    background-color: #3B82F6; /* Blue-500 */
+}
+
+/* Toast hover - pause progress */
+.toast:hover .toast-progress-bar {
+    animation-play-state: paused;
+}
+
+
+/* =============================================================================
+   HTMX CONTENT LOADING STATES
+   Visual feedback during HTMX swaps and transitions
+   ============================================================================= */
+
+/* Fade in effect after HTMX swap */
+.htmx-added {
+    animation: fadeIn 300ms ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Settling state during swap */
+.htmx-settling {
+    opacity: 0.8;
+}
+
+/* Swapping state - slight dim effect */
+.htmx-swapping {
+    opacity: 0.5;
+    transition: opacity 200ms ease-in;
+}
+
+/* Content area loading overlay */
+.content-loading {
+    position: relative;
+}
+
+.content-loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+/* =============================================================================
+   BUTTON LOADING STATES
+   Disabled appearance and spinner integration
+   ============================================================================= */
+
+button.htmx-request,
+.btn.htmx-request {
+    opacity: 0.75;
+    cursor: wait;
+    pointer-events: none;
+}
+
+/* Button with integrated spinner */
+button.htmx-request .htmx-indicator,
+.btn.htmx-request .htmx-indicator {
+    display: inline-flex;
+    opacity: 1;
+}
+
+/* Hide button text during loading (optional, use with care) */
+button.htmx-request .btn-text-loading,
+.btn.htmx-request .btn-text-loading {
+    visibility: hidden;
+}
+
+
+/* =============================================================================
+   FORM LOADING STATES
+   Visual feedback for forms during submission
+   ============================================================================= */
+
+form.htmx-request {
+    opacity: 0.8;
+    pointer-events: none;
+}
+
+form.htmx-request input,
+form.htmx-request select,
+form.htmx-request textarea,
+form.htmx-request button {
+    cursor: wait;
+}
+
+
+/* =============================================================================
+   ACCESSIBILITY - FOCUS VISIBLE STYLES
+   Enhanced keyboard navigation indicators
+   ============================================================================= */
+
+/* Modern focus-visible for keyboard users only */
+:focus-visible {
+    outline: 2px solid #4F46E5; /* Indigo-600 */
+    outline-offset: 2px;
+}
+
+/* Remove default focus ring, use focus-visible instead */
+:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Enhanced focus for interactive elements */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid #4F46E5;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15);
+}
+
+/* Focus within for dropdown containers */
+[x-data]:focus-within {
+    outline: none;
+}
+
+
+/* =============================================================================
+   BADGE ANIMATIONS
+   Pop animation for updating badge counts
+   ============================================================================= */
+
+@keyframes badge-pop {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.badge-updated {
+    animation: badge-pop 300ms ease;
+}
+
+.nav-badge {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 9999px;
+    font-weight: 600;
+}
+
+
+/* =============================================================================
+   TASK ROW/CARD HOVER EFFECTS
+   Subtle interactions for list and card views
+   ============================================================================= */
+
+.task-row,
+.task-card {
+    transition: background-color 200ms ease,
+                box-shadow 200ms ease,
+                transform 150ms ease;
+}
+
+.task-row:hover:not(.task-overdue):not(.task-escalated),
+.task-card:hover:not(.task-overdue):not(.task-escalated) {
+    background-color: #F9FAFB; /* Gray-50 */
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+/* Status-specific hover states */
+.status-pending:hover:not(.task-overdue):not(.task-escalated) {
+    background-color: #FDE68A; /* Yellow-200 */
+}
+
+.status-in-progress:hover:not(.task-overdue):not(.task-escalated),
+.status-in_progress:hover:not(.task-overdue):not(.task-escalated) {
+    background-color: #BFDBFE; /* Blue-200 */
+}
+
+.status-completed:hover:not(.task-overdue):not(.task-escalated) {
+    background-color: #A7F3D0; /* Green-200 */
+}
+
+.status-verified:hover:not(.task-overdue):not(.task-escalated) {
+    background-color: #6EE7B7; /* Green-300 */
+}
+
+.status-cancelled:hover {
+    background-color: #E5E7EB; /* Gray-200 */
+}
+
+
+/* =============================================================================
+   QUICK ACTION BUTTONS
+   Show/hide actions on hover
+   ============================================================================= */
+
+.quick-action-btn {
+    transition: all 150ms ease;
+    opacity: 0.7;
+}
+
+.task-row:hover .quick-action-btn,
+.task-card:hover .quick-action-btn {
+    opacity: 1;
+}
+
+.quick-action-btn:hover {
+    transform: scale(1.1);
+}
+
+
+/* =============================================================================
+   TRANSITION UTILITIES
+   General purpose transitions
+   ============================================================================= */
+
+.transition-fast {
+    transition: all 150ms ease;
+}
+
+.transition-normal {
+    transition: all 200ms ease;
+}
+
+.transition-slow {
+    transition: all 300ms ease;
+}
+
+
+/* =============================================================================
+   MOBILE RESPONSIVE ADJUSTMENTS
+   Touch-friendly adjustments for mobile devices
+   ============================================================================= */
+
+@media (max-width: 640px) {
+    /* Larger touch targets on mobile */
+    button,
+    .btn,
+    a.btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    /* Toast container adjustments */
+    #toast-container {
+        left: 1rem;
+        right: 1rem;
+        bottom: 1rem;
+        max-width: none;
+    }
+    
+    .toast {
+        max-width: none;
+    }
+}
+
+
+/* =============================================================================
+   PRINT STYLES
+   Hide non-essential elements when printing
+   ============================================================================= */
+
+@media print {
+    #global-loading,
+    #toast-container,
+    .htmx-indicator,
+    .nav-badge,
+    .quick-action-btn {
+        display: none !important;
+    }
 }
