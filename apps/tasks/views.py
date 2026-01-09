@@ -40,6 +40,7 @@ from .permissions import (
 from .filters import TaskFilter, DashboardTaskFilter, get_sorting_options, apply_sorting
 from apps.departments.models import Department
 from apps.accounts.models import User
+import json
 
 
 # =============================================================================
@@ -373,6 +374,142 @@ def quick_status_change(request, pk):
         messages.error(request, str(e))
         return redirect('tasks:task_detail', pk=pk)
 
+@login_required
+@require_POST
+def inline_status_change(request, pk):
+    """
+    HTMX endpoint for inline status change from task list/kanban.
+    
+    Features:
+    - Permission check via permissions.can_change_status()
+    - Uses existing services.change_status()
+    - Returns updated task_row.html partial
+    - HX-Trigger header for toast notification
+    - Returns 403 with error toast on permission denied
+    """
+    task = get_object_or_404(
+        Task.objects.select_related('assignee', 'created_by', 'department'),
+        pk=pk
+    )
+    
+    # Permission check
+    if not can_change_status(request.user, task):
+        response = HttpResponse(
+            '<div class="text-red-600 text-sm p-2 bg-red-50 rounded">'
+            'You do not have permission to change this task status.'
+            '</div>',
+            status=403
+        )
+        response['HX-Trigger'] = json.dumps({
+            'showToast': {
+                'message': 'Permission denied: Cannot change task status',
+                'type': 'error'
+            }
+        })
+        return response
+    
+    new_status = request.POST.get('status')
+    if not new_status:
+        response = HttpResponse(
+            '<div class="text-red-600 text-sm p-2 bg-red-50 rounded">'
+            'Missing status parameter.'
+            '</div>',
+            status=400
+        )
+        response['HX-Trigger'] = json.dumps({
+            'showToast': {
+                'message': 'Invalid request: Missing status',
+                'type': 'error'
+            }
+        })
+        return response
+    
+    # Validate the status transition
+    if not task.can_transition_to(new_status):
+        old_display = task.get_status_display()
+        new_display = dict(Task.Status.choices).get(new_status, new_status)
+        error_msg = f'Cannot transition from {old_display} to {new_display}'
+        
+        response = HttpResponse(
+            f'<div class="text-red-600 text-sm p-2 bg-red-50 rounded">{error_msg}</div>',
+            status=400
+        )
+        response['HX-Trigger'] = json.dumps({
+            'showToast': {
+                'message': error_msg,
+                'type': 'error'
+            }
+        })
+        return response
+    
+    try:
+        # Use the service layer to change status
+        change_status(task, request.user, new_status)
+        
+        # Refresh task from DB to get updated data
+        task.refresh_from_db()
+        
+        # Build success message
+        new_status_display = task.get_status_display()
+        success_msg = f'Task status changed to {new_status_display}'
+        
+        # Render the updated task row
+        response = render(request, 'tasks/partials/task_row.html', {
+            'task': task,
+            'request': request,
+        })
+        
+        # Add HX-Trigger header for toast notification
+        response['HX-Trigger'] = json.dumps({
+            'showToast': {
+                'message': success_msg,
+                'type': 'success'
+            }
+        })
+        
+        return response
+        
+    except PermissionError as e:
+        error_msg = str(e)
+        response = HttpResponse(
+            f'<div class="text-red-600 text-sm p-2 bg-red-50 rounded">{error_msg}</div>',
+            status=403
+        )
+        response['HX-Trigger'] = json.dumps({
+            'showToast': {
+                'message': error_msg,
+                'type': 'error'
+            }
+        })
+        return response
+        
+    except ValidationError as e:
+        error_msg = str(e)
+        response = HttpResponse(
+            f'<div class="text-red-600 text-sm p-2 bg-red-50 rounded">{error_msg}</div>',
+            status=400
+        )
+        response['HX-Trigger'] = json.dumps({
+            'showToast': {
+                'message': error_msg,
+                'type': 'error'
+            }
+        })
+        return response
+        
+    except Exception as e:
+        error_msg = f'Error changing status: {str(e)}'
+        response = HttpResponse(
+            f'<div class="text-red-600 text-sm p-2 bg-red-50 rounded">{error_msg}</div>',
+            status=500
+        )
+        response['HX-Trigger'] = json.dumps({
+            'showToast': {
+                'message': 'An error occurred while changing status',
+                'type': 'error'
+            }
+        })
+        return response
 
 # =============================================================================
 # Task Actions (Reassign, Cancel)
@@ -441,7 +578,20 @@ def task_cancel(request, pk):
 @login_required
 @require_POST
 def add_comment_view(request, pk):
-    """Add a comment to a task (HTMX endpoint)."""
+    """
+    HTMX endpoint for adding comments to a task.
+    
+    Enhancements in Sub-Phase 11C:
+    - Returns just the new comment.html partial (for beforeend swap)
+    - HX-Trigger header for success toast
+    - Returns 400 with error toast on empty content
+    - Returns 403 with error toast on permission denied
+    
+    Expected POST data:
+    - content: Comment text content
+    """
+    import json
+    
     task = get_object_or_404(Task, pk=pk)
     
     # Check permission using updated function
@@ -451,29 +601,64 @@ def add_comment_view(request, pk):
             error_msg = 'Cannot add comments to cancelled tasks.'
         
         if request.headers.get('HX-Request'):
-            return HttpResponse(
-                f'<div class="text-red-600 text-sm p-2">{error_msg}</div>',
+            response = HttpResponse(
+                f'<div class="text-red-600 text-sm p-2 bg-red-50 rounded mb-4">{error_msg}</div>',
                 status=403
             )
+            response['HX-Trigger'] = json.dumps({
+                'showToast': {
+                    'message': error_msg,
+                    'type': 'error'
+                }
+            })
+            return response
         messages.error(request, error_msg)
         return redirect('tasks:task_detail', pk=pk)
     
     form = CommentForm(request.POST)
     
     if form.is_valid():
+        content = form.cleaned_data['content'].strip()
+        
+        # Check for empty content after stripping
+        if not content:
+            error_msg = 'Comment cannot be empty.'
+            if request.headers.get('HX-Request'):
+                response = HttpResponse(
+                    f'<div class="text-red-600 text-sm p-2 bg-red-50 rounded mb-4">{error_msg}</div>',
+                    status=400
+                )
+                response['HX-Trigger'] = json.dumps({
+                    'showToast': {
+                        'message': error_msg,
+                        'type': 'error'
+                    }
+                })
+                return response
+            messages.error(request, error_msg)
+            return redirect('tasks:task_detail', pk=pk)
+        
         try:
             # Use the service layer to add comment (handles validation & activity logging)
             comment = add_comment(
                 task=task,
                 user=request.user,
-                content=form.cleaned_data['content']
+                content=content
             )
             
             # HTMX Response: Return just the new comment partial
             if request.headers.get('HX-Request'):
-                return render(request, 'tasks/partials/comment.html', {
+                response = render(request, 'tasks/partials/comment.html', {
                     'comment': comment,
                 })
+                # Add success toast trigger
+                response['HX-Trigger'] = json.dumps({
+                    'showToast': {
+                        'message': 'Comment added successfully',
+                        'type': 'success'
+                    }
+                })
+                return response
             
             # Non-HTMX Fallback
             messages.success(request, 'Comment added successfully.')
@@ -482,34 +667,51 @@ def add_comment_view(request, pk):
         except PermissionError as e:
             error_msg = str(e)
             if request.headers.get('HX-Request'):
-                return HttpResponse(
-                    f'<div class="text-red-600 text-sm p-2">{error_msg}</div>',
+                response = HttpResponse(
+                    f'<div class="text-red-600 text-sm p-2 bg-red-50 rounded mb-4">{error_msg}</div>',
                     status=403
                 )
+                response['HX-Trigger'] = json.dumps({
+                    'showToast': {
+                        'message': error_msg,
+                        'type': 'error'
+                    }
+                })
+                return response
             messages.error(request, error_msg)
             return redirect('tasks:task_detail', pk=pk)
             
         except Exception as e:
             error_msg = f'Error adding comment: {str(e)}'
             if request.headers.get('HX-Request'):
-                return HttpResponse(
-                    f'<div class="text-red-600 text-sm p-2">{error_msg}</div>',
+                response = HttpResponse(
+                    f'<div class="text-red-600 text-sm p-2 bg-red-50 rounded mb-4">{error_msg}</div>',
                     status=400
                 )
+                response['HX-Trigger'] = json.dumps({
+                    'showToast': {
+                        'message': 'An error occurred while adding comment',
+                        'type': 'error'
+                    }
+                })
+                return response
             messages.error(request, error_msg)
             return redirect('tasks:task_detail', pk=pk)
     
     # Form validation failed
     error_msg = 'Comment cannot be empty.'
-    if form.errors:
-        error_msg = '; '.join([f'{field}: {", ".join(errors)}' for field, errors in form.errors.items()])
-    
     if request.headers.get('HX-Request'):
-        return HttpResponse(
-            f'<div class="text-red-600 text-sm p-2">{error_msg}</div>',
+        response = HttpResponse(
+            f'<div class="text-red-600 text-sm p-2 bg-red-50 rounded mb-4">{error_msg}</div>',
             status=400
         )
-    
+        response['HX-Trigger'] = json.dumps({
+            'showToast': {
+                'message': error_msg,
+                'type': 'error'
+            }
+        })
+        return response
     messages.error(request, error_msg)
     return redirect('tasks:task_detail', pk=pk)
 

@@ -30,7 +30,8 @@ urlpatterns = [
     # Status changes
     path('<int:pk>/status/', views.task_status_change, name='task_status_change'),
     path('<int:pk>/quick-status/', views.quick_status_change, name='quick_status_change'),
-    
+    path('<int:pk>/inline-status/', views.inline_status_change, name='inline_status_change'),  # NEW
+
     # Task actions
     path('<int:pk>/reassign/', views.task_reassign, name='task_reassign'),
     path('<int:pk>/cancel/', views.task_cancel, name='task_cancel'),

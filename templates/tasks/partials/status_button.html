@@ -1,43 +1,205 @@
-{% if can_change_status %}
-    {% with next_status=task.get_next_status %}
-    {% if next_status %}
-    <form method="post" 
-          action="{% url 'tasks:quick_status_change' task.pk %}"
-          hx-post="{% url 'tasks:quick_status_change' task.pk %}"
-          hx-swap="outerHTML"
-          class="inline">
-        {% csrf_token %}
-        <button type="submit" 
-                class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white 
-                {% if next_status == 'in_progress' %}bg-blue-600 hover:bg-blue-700
-                {% elif next_status == 'completed' %}bg-green-600 hover:bg-green-700
-                {% elif next_status == 'verified' %}bg-indigo-600 hover:bg-indigo-700
-                {% else %}bg-gray-600 hover:bg-gray-700{% endif %}">
-            {% if next_status == 'in_progress' %}
-            Start Working
-            {% elif next_status == 'completed' %}
-            Mark Complete
-            {% elif next_status == 'verified' %}
-            Verify
+{% comment %}
+templates/tasks/partials/status_button.html
+Sub-Phase 11C: Inline Status Changes
+
+Alpine.js dropdown showing current status as a button.
+- Only shows valid next statuses based on workflow
+- HTMX POST to change status, swaps entire task row
+- Loading indicator during request
+- Cancel option opens modal (not inline)
+- Color-coded by status
+
+Context variables required:
+- task: Task instance
+- allowed_transitions: List of (value, display) tuples (optional, will be computed if not provided)
+
+Usage:
+{% include 'tasks/partials/status_button.html' with task=task %}
+{% endcomment %}
+
+{% load task_tags %}
+
+{# Compute allowed transitions if not provided #}
+{% with transitions=allowed_transitions|default_if_none:"" %}
+
+<div class="inline-flex items-center" 
+     x-data="{ 
+         open: false, 
+         loading: false,
+         currentStatus: '{{ task.status }}',
+         changeStatus(newStatus) {
+             this.loading = true;
+             this.open = false;
+         }
+     }"
+     @click.away="open = false">
+    
+    {# Current Status Button #}
+    <div class="relative">
+        <button @click="open = !open"
+                :disabled="loading"
+                type="button"
+                class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500
+                       {% if task.status == 'pending' %}
+                       bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border border-yellow-300
+                       {% elif task.status == 'in_progress' %}
+                       bg-blue-100 text-blue-800 hover:bg-blue-200 border border-blue-300
+                       {% elif task.status == 'completed' %}
+                       bg-green-100 text-green-800 hover:bg-green-200 border border-green-300
+                       {% elif task.status == 'verified' %}
+                       bg-emerald-100 text-emerald-800 border border-emerald-300 cursor-default
+                       {% elif task.status == 'cancelled' %}
+                       bg-gray-100 text-gray-500 border border-gray-300 cursor-default
+                       {% endif %}"
+                :class="{ 'opacity-75 cursor-wait': loading }">
+            
+            {# Status Icon #}
+            {% if task.status == 'pending' %}
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            {% elif task.status == 'in_progress' %}
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            {% elif task.status == 'completed' %}
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            {% elif task.status == 'verified' %}
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+            </svg>
+            {% elif task.status == 'cancelled' %}
+            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+            </svg>
+            {% endif %}
+            
+            {# Status Text #}
+            <span>{{ task.get_status_display }}</span>
+            
+            {# Loading Spinner (replaces chevron when loading) #}
+            <template x-if="loading">
+                <svg class="animate-spin ml-1.5 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </template>
+            
+            {# Dropdown Chevron (only show if there are transitions available) #}
+            {% if task.status not in 'verified,cancelled' %}
+            <template x-if="!loading">
+                <svg class="ml-1.5 h-4 w-4 transition-transform duration-200" 
+                     :class="{ 'rotate-180': open }"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </template>
             {% endif %}
         </button>
-    </form>
-    {% else %}
-    <span class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-500">
-        {% if task.status == 'verified' %}✓ Verified
-        {% elif task.status == 'cancelled' %}Cancelled
-        {% elif task.status == 'completed' and task.is_personal %}✓ Completed
+        
+        {# Dropdown Menu - Only show for non-terminal statuses #}
+        {% if task.status not in 'verified,cancelled' %}
+        <div x-show="open"
+             x-transition:enter="transition ease-out duration-100"
+             x-transition:enter-start="transform opacity-0 scale-95"
+             x-transition:enter-end="transform opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-75"
+             x-transition:leave-start="transform opacity-100 scale-100"
+             x-transition:leave-end="transform opacity-0 scale-95"
+             class="absolute z-20 mt-1 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 py-1"
+             style="display: none;">
+            
+            {# Status Transition Options #}
+            <div class="py-1" role="menu" aria-orientation="vertical">
+                
+                {# Progress to In Progress (from Pending) #}
+                {% if task.status == 'pending' %}
+                <form hx-post="{% url 'tasks:inline_status_change' task.pk %}"
+                      hx-target="#task-row-{{ task.pk }}"
+                      hx-swap="outerHTML"
+                      hx-indicator="#status-loading-{{ task.pk }}"
+                      @htmx:before-request="changeStatus('in_progress')">
+                    {% csrf_token %}
+                    <input type="hidden" name="status" value="in_progress">
+                    <button type="submit"
+                            class="w-full text-left px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 flex items-center group">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-blue-500 mr-3 group-hover:ring-2 group-hover:ring-blue-200"></span>
+                        <span class="flex-1">Start Progress</span>
+                        <svg class="w-4 h-4 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                        </svg>
+                    </button>
+                </form>
+                {% endif %}
+                
+                {# Progress to Completed (from In Progress) #}
+                {% if task.status == 'in_progress' %}
+                <form hx-post="{% url 'tasks:inline_status_change' task.pk %}"
+                      hx-target="#task-row-{{ task.pk }}"
+                      hx-swap="outerHTML"
+                      hx-indicator="#status-loading-{{ task.pk }}"
+                      @htmx:before-request="changeStatus('completed')">
+                    {% csrf_token %}
+                    <input type="hidden" name="status" value="completed">
+                    <button type="submit"
+                            class="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 flex items-center group">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-green-500 mr-3 group-hover:ring-2 group-hover:ring-green-200"></span>
+                        <span class="flex-1">Mark Complete</span>
+                        <svg class="w-4 h-4 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </button>
+                </form>
+                {% endif %}
+                
+                {# Verify (from Completed - only for delegated tasks) #}
+                {% if task.status == 'completed' and task.task_type == 'delegated' %}
+                <form hx-post="{% url 'tasks:inline_status_change' task.pk %}"
+                      hx-target="#task-row-{{ task.pk }}"
+                      hx-swap="outerHTML"
+                      hx-indicator="#status-loading-{{ task.pk }}"
+                      @htmx:before-request="changeStatus('verified')">
+                    {% csrf_token %}
+                    <input type="hidden" name="status" value="verified">
+                    <button type="submit"
+                            class="w-full text-left px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-50 flex items-center group">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 mr-3 group-hover:ring-2 group-hover:ring-emerald-200"></span>
+                        <span class="flex-1">Verify Complete</span>
+                        <svg class="w-4 h-4 text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+                        </svg>
+                    </button>
+                </form>
+                {% endif %}
+                
+                {# Divider before Cancel #}
+                {% if task.status not in 'verified,cancelled' %}
+                <div class="border-t border-gray-100 my-1"></div>
+                
+                {# Cancel Task - Links to cancel page/modal #}
+                <a href="{% url 'tasks:task_cancel' task.pk %}"
+                   class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center group">
+                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-400 mr-3 group-hover:bg-red-400 transition-colors"></span>
+                    <span class="flex-1">Cancel Task</span>
+                    <svg class="w-4 h-4 text-gray-400 group-hover:text-red-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </a>
+                {% endif %}
+            </div>
+        </div>
         {% endif %}
-    </span>
-    {% endif %}
-    {% endwith %}
-{% else %}
-<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-    {% if task.status == 'pending' %}bg-yellow-100 text-yellow-800
-    {% elif task.status == 'in_progress' %}bg-blue-100 text-blue-800
-    {% elif task.status == 'completed' %}bg-green-100 text-green-800
-    {% elif task.status == 'verified' %}bg-green-200 text-green-900
-    {% else %}bg-gray-100 text-gray-800{% endif %}">
-    {{ task.get_status_display }}
-</span>
-{% endif %}
+    </div>
+    
+    {# Hidden loading indicator for HTMX #}
+    <div id="status-loading-{{ task.pk }}" class="htmx-indicator ml-2">
+        <svg class="animate-spin h-4 w-4 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+    </div>
+</div>
+
+{% endwith %}
