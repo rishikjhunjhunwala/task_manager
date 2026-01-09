@@ -1,0 +1,344 @@
+{% comment %}
+templates/components/navigation.html
+Phase 11A: Extracted Navigation Component
+
+Desktop & mobile navigation with:
+- Role-based link visibility
+- Badge counts with HTMX polling (every 60s)
+- User dropdown with profile/logout
+- Mobile menu toggle with Alpine.js
+
+Required context variables (from context processors):
+- pending_task_count
+- overdue_task_count
+- can_view_department_tasks
+- can_view_management_overview
+- can_view_reports
+- can_view_activity_log
+- can_manage_users
+{% endcomment %}
+
+{% load task_tags %}
+
+<nav class="bg-white shadow-sm border-b sticky top-0 z-50" x-data="{ mobileMenuOpen: false, userMenuOpen: false }">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+            <!-- Logo and main nav -->
+            <div class="flex">
+                <div class="flex-shrink-0 flex items-center">
+                    <a href="{% url 'tasks:dashboard' %}" class="text-xl font-bold text-indigo-600">
+                        Task Manager
+                    </a>
+                </div>
+                
+                {% if user.is_authenticated %}
+                <!-- Desktop Navigation Links -->
+                <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                    <!-- Dashboard Link with Pending Badge -->
+                    <a href="{% url 'tasks:dashboard' %}" 
+                       class="{% if request.resolver_match.url_name == 'dashboard' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        Dashboard
+                        <!-- Nav Badge with HTMX Polling -->
+                        <span id="nav-pending-badge"
+                              class="ml-2 nav-badge bg-indigo-100 text-indigo-600"
+                              hx-get="{% url 'tasks:badge_counts' %}?type=nav_pending"
+                              hx-trigger="load, every 60s"
+                              hx-swap="innerHTML">
+                            {{ pending_task_count|default:0 }}
+                        </span>
+                        {% if overdue_task_count > 0 %}
+                        <span id="nav-overdue-badge"
+                              class="ml-1 nav-badge bg-red-600 text-white"
+                              hx-get="{% url 'tasks:badge_counts' %}?type=nav_overdue"
+                              hx-trigger="load, every 60s"
+                              hx-swap="innerHTML">
+                            {{ overdue_task_count }}
+                        </span>
+                        {% endif %}
+                    </a>
+                    
+                    <!-- All Tasks Link -->
+                    <a href="{% url 'tasks:task_list' %}" 
+                       class="{% if request.resolver_match.url_name == 'task_list' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        All Tasks
+                    </a>
+                    
+                    <!-- Kanban Board Link -->
+                    <a href="{% url 'tasks:kanban_board' %}" 
+                       class="{% if request.resolver_match.url_name == 'kanban_board' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+                        </svg>
+                        Kanban
+                    </a>
+                    
+                    {% if can_view_department_tasks %}
+                    <!-- Department Tasks (Manager+) -->
+                    <a href="{% url 'tasks:department_tasks' %}" 
+                       class="{% if request.resolver_match.url_name == 'department_tasks' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        Department
+                    </a>
+                    {% endif %}
+                    
+                    {% if can_view_management_overview %}
+                    <!-- Management Overview (Senior Manager+) -->
+                    <a href="{% url 'tasks:management_overview' %}" 
+                       class="{% if request.resolver_match.url_name == 'management_overview' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                        </svg>
+                        Overview
+                        {% if overdue_task_count > 0 %}
+                        <span class="ml-1 nav-badge bg-red-600 text-white">!</span>
+                        {% endif %}
+                    </a>
+                    {% endif %}
+                    
+                    {% if can_view_reports %}
+                    <!-- Reports (Manager+) -->
+                    <a href="{% url 'reports:dashboard' %}" 
+                       class="{% if request.resolver_match.app_name == 'reports' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                        </svg>
+                        Reports
+                    </a>
+                    {% endif %}
+                    
+                    {% if can_view_activity_log %}
+                    <!-- Activity Log (Admin only) -->
+                    <a href="{% url 'activity_log:activity_list' %}" 
+                       class="{% if request.resolver_match.app_name == 'activity_log' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                        </svg>
+                        Activity
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Right side: User menu (Desktop) -->
+            <div class="hidden sm:ml-6 sm:flex sm:items-center">
+                {% if user.is_authenticated %}
+                <!-- User Dropdown -->
+                <div class="ml-3 relative">
+                    <button @click="userMenuOpen = !userMenuOpen"
+                            @click.outside="userMenuOpen = false"
+                            type="button" 
+                            class="flex items-center max-w-xs text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            id="user-menu-button"
+                            aria-expanded="false"
+                            aria-haspopup="true">
+                        <span class="sr-only">Open user menu</span>
+                        <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-medium">
+                            {{ user.first_name.0|default:user.email.0|upper }}
+                        </div>
+                        <span class="ml-2 text-gray-700 font-medium">{{ user.first_name|default:user.email }}</span>
+                        <svg class="ml-1 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                    
+                    <!-- Dropdown Menu -->
+                    <div x-show="userMenuOpen"
+                         x-transition:enter="transition ease-out duration-100"
+                         x-transition:enter-start="transform opacity-0 scale-95"
+                         x-transition:enter-end="transform opacity-100 scale-100"
+                         x-transition:leave="transition ease-in duration-75"
+                         x-transition:leave-start="transform opacity-100 scale-100"
+                         x-transition:leave-end="transform opacity-0 scale-95"
+                         class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
+                         role="menu"
+                         aria-orientation="vertical"
+                         aria-labelledby="user-menu-button">
+                        <div class="px-4 py-2 border-b border-gray-100">
+                            <p class="text-sm font-medium text-gray-900">{{ user.get_full_name|default:user.email }}</p>
+                            <p class="text-xs text-gray-500">{{ user.get_role_display }}</p>
+                        </div>
+                        <a href="{% url 'accounts:profile' %}" 
+                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" 
+                           role="menuitem">
+                            <svg class="inline-block w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                            </svg>
+                            Your Profile
+                        </a>
+                        <a href="{% url 'accounts:password_change' %}" 
+                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" 
+                           role="menuitem">
+                            <svg class="inline-block w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                            </svg>
+                            Change Password
+                        </a>
+                        {% if can_manage_users %}
+                        <a href="{% url 'accounts:user_list' %}" 
+                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" 
+                           role="menuitem">
+                            <svg class="inline-block w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                            </svg>
+                            Manage Users
+                        </a>
+                        {% endif %}
+                        <div class="border-t border-gray-100"></div>
+                        <form method="post" action="{% url 'accounts:logout' %}">
+                            {% csrf_token %}
+                            <button type="submit" 
+                                    class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" 
+                                    role="menuitem">
+                                <svg class="inline-block w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                </svg>
+                                Sign out
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% else %}
+                <a href="{% url 'accounts:login' %}" class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm font-medium">
+                    Sign in
+                </a>
+                {% endif %}
+            </div>
+            
+            <!-- Mobile menu button -->
+            <div class="flex items-center sm:hidden">
+                {% if user.is_authenticated %}
+                <button @click="mobileMenuOpen = !mobileMenuOpen"
+                        type="button" 
+                        class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+                        aria-controls="mobile-menu"
+                        aria-expanded="false">
+                    <span class="sr-only">Open main menu</span>
+                    <!-- Hamburger icon -->
+                    <svg x-show="!mobileMenuOpen" class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <!-- Close icon -->
+                    <svg x-show="mobileMenuOpen" class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: none;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile menu -->
+    {% if user.is_authenticated %}
+    <div x-show="mobileMenuOpen"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 -translate-y-1"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 -translate-y-1"
+         class="sm:hidden"
+         id="mobile-menu"
+         style="display: none;">
+        <div class="pt-2 pb-3 space-y-1">
+            <!-- Dashboard -->
+            <a href="{% url 'tasks:dashboard' %}" 
+               class="{% if request.resolver_match.url_name == 'dashboard' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                Dashboard
+                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-600">
+                    {{ pending_task_count|default:0 }}
+                </span>
+            </a>
+            
+            <!-- All Tasks -->
+            <a href="{% url 'tasks:task_list' %}" 
+               class="{% if request.resolver_match.url_name == 'task_list' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                All Tasks
+            </a>
+            
+            <!-- Kanban -->
+            <a href="{% url 'tasks:kanban_board' %}" 
+               class="{% if request.resolver_match.url_name == 'kanban_board' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                Kanban Board
+            </a>
+            
+            {% if can_view_department_tasks %}
+            <!-- Department Tasks -->
+            <a href="{% url 'tasks:department_tasks' %}" 
+               class="{% if request.resolver_match.url_name == 'department_tasks' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                Department Tasks
+            </a>
+            {% endif %}
+            
+            {% if can_view_management_overview %}
+            <!-- Management Overview -->
+            <a href="{% url 'tasks:management_overview' %}" 
+               class="{% if request.resolver_match.url_name == 'management_overview' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                Management Overview
+                {% if overdue_task_count > 0 %}
+                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">
+                    {{ overdue_task_count }} overdue
+                </span>
+                {% endif %}
+            </a>
+            {% endif %}
+            
+            {% if can_view_reports %}
+            <!-- Reports -->
+            <a href="{% url 'reports:dashboard' %}" 
+               class="{% if request.resolver_match.app_name == 'reports' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                Reports
+            </a>
+            {% endif %}
+            
+            {% if can_view_activity_log %}
+            <!-- Activity Log -->
+            <a href="{% url 'activity_log:activity_list' %}" 
+               class="{% if request.resolver_match.app_name == 'activity_log' %}bg-indigo-50 border-indigo-500 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700{% endif %} block pl-3 pr-4 py-2 border-l-4 text-base font-medium">
+                Activity Log
+            </a>
+            {% endif %}
+        </div>
+        
+        <!-- Mobile user section -->
+        <div class="pt-4 pb-3 border-t border-gray-200">
+            <div class="flex items-center px-4">
+                <div class="flex-shrink-0">
+                    <div class="h-10 w-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-medium">
+                        {{ user.first_name.0|default:user.email.0|upper }}
+                    </div>
+                </div>
+                <div class="ml-3">
+                    <div class="text-base font-medium text-gray-800">{{ user.get_full_name|default:user.email }}</div>
+                    <div class="text-sm font-medium text-gray-500">{{ user.email }}</div>
+                </div>
+            </div>
+            <div class="mt-3 space-y-1">
+                <a href="{% url 'accounts:profile' %}" 
+                   class="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
+                    Your Profile
+                </a>
+                <a href="{% url 'accounts:password_change' %}" 
+                   class="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
+                    Change Password
+                </a>
+                {% if can_manage_users %}
+                <a href="{% url 'accounts:user_list' %}" 
+                   class="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
+                    Manage Users
+                </a>
+                {% endif %}
+                <form method="post" action="{% url 'accounts:logout' %}">
+                    {% csrf_token %}
+                    <button type="submit" 
+                            class="block w-full text-left px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100">
+                        Sign out
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</nav>
